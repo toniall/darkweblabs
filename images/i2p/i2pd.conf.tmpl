@@ -29,11 +29,10 @@ host = @HOST@
 ## router advertising 10.x is either misconfigured or lying. Here every router
 ## IS on 10.152.154.x by construction, so the default silently rejects every
 ## peer in the testnet. This is the second half of the empty-NetDB problem.
-[limits]
+## NOTE: reservedrange and loglevel are TOP-LEVEL keys. Do not put them under
+## [limits] or [log] — i2pd then looks for limits.reservedrange / log.loglevel,
+## rejects them as unrecognised, and aborts before router.info is minted.
 reservedrange = false
-
-## Reseed lines are the thing you actually need to read when this misbehaves.
-[log]
 loglevel = info
 
 ## Router web console. Bound wide so the container's 7070 is reachable in-lab
