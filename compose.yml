@@ -1,0 +1,501 @@
+# Unlock the Secrets of the DARK WEB, Volume 2 | Antonio Brandao, Author | August 2026
+# Unlock the Secrets of the DARK WEB, Volume 2 — lab stack
+#
+#   ./lab up base
+#
+# Topology (two-container Whonix, V4-4):
+#
+#   host ──NAT──▶ [ gateway ]  runs tor + the transparent-proxy firewall.
+#                    ▲           Two interfaces: external (reaches the real Tor
+#                    │ default    network) and internal (10.152.152.10).
+#                    │ route
+#             [ workstation ]  on the internal net only; its default route is
+#                    │          the gateway, so every connection is redirected
+#                    │          through tor or rejected. Publishes its OWN
+#                    │          desktop port over a separate, egress-locked
+#                    │          access bridge.
+#
+#             [ portal ]  internal only, no route out.
+#
+# Two containers do the Tor path now — gateway and workstation — instead of the
+# three the V4 stack used (tor + a one-shot rules sidecar + workstation). The
+# isolation is unchanged in kind: the workstation still has no path to the
+# clearnet except through the gateway, and anything the gateway cannot carry
+# over Tor is rejected, not leaked.
+
+name: darkweb
+
+networks:
+  # tor's path to the real Tor network. Only the gateway attaches here.
+  external:
+    name: darkweb_external
+    driver: bridge
+
+  # the torified data path + the portal. No route out (Lab 1.2 verifies it):
+  # the workstation reaches the internet only by handing packets to the gateway.
+  internal:
+    name: darkweb_internal
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.152.152.0/24
+
+  # out-of-band desktop access. Carries the inbound noVNC session and nothing
+  # else — the workstation firewall rejects any connection it tries to open on
+  # this interface, so it cannot be used to reach the internet around Tor. This
+  # is the Docker stand-in for a hypervisor console: how you reach a Whonix
+  # workstation without giving it a way out.
+  deskaccess:
+    name: darkweb_deskaccess
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.152.153.0/24
+
+  # ── Chapter 6 · I2P testnet network ─────────────────────────────────────────
+  # Internal-only (no route out) and used with a custom netid, so these routers
+  # only ever talk to each other - never the live I2P network, and it never sees
+  # them. Part I's fail-closed guarantee, applied to a second overlay by design.
+  i2pnet:
+    name: darkweb_i2pnet
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.152.154.0/24
+
+  # ── Chapter 7 · Hyphanet darknet testnet network ────────────────────────────
+  # Internal-only (no route out). The nodes are wired as mutual darknet friends
+  # and never reach the public Hyphanet network. Fail-closed by construction,
+  # like the I2P testnet.
+  fnnet:
+    name: darkweb_fnnet
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.152.155.0/24
+
+  # ── Chapter 8 · Simulated darknet range network ─────────────────────────────
+  # Internal traffic between the onion publisher and the web backends. range-tor
+  # also joins the external network to reach the real Tor network and publish the
+  # onion services; the web backends stay internal-only.
+  rangenet:
+    name: darkweb_rangenet
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.152.156.0/24
+
+  # RansomChat (Chapter 12): a normal bridge so the chat backend can reach the
+  # OpenAI/Grok APIs and the local Ollama container. Not torified — it is lab
+  # infrastructure, and the reader opens the chat from the host browser.
+  chatnet:
+    name: darkweb_chatnet
+    driver: bridge
+
+volumes:
+  evidence:
+    name: darkweb_evidence    # your work — survives `lab reset`
+  tor_data:
+    name: darkweb_tor_data    # guard state — survives `lab reset`
+  ws_scratch:
+    name: darkweb_ws_scratch  # discarded by `lab reset`
+  i2p_seed:
+    name: darkweb_i2p_seed    # shared routerInfo bootstrap for the I2P testnet
+  i2p_ff1: { name: darkweb_i2p_ff1 }   # per-router identity + NetDB. Without these
+  i2p_ff2: { name: darkweb_i2p_ff2 }   # the routers mint a new identity on every
+  i2p_r1:  { name: darkweb_i2p_r1 }    # recycle and the testnet starts from zero
+  i2p_r2:  { name: darkweb_i2p_r2 }    # each time — which is what made Chapter 6
+  i2p_r3:  { name: darkweb_i2p_r3 }    # look unconvergeable rather than unpersisted
+  fn_seed:
+    name: darkweb_fn_seed     # shared darknet noderef bootstrap for Hyphanet
+  range_content:
+    name: darkweb_range_content  # generated watermarked range content (Chapter 8)
+  ollama_models:
+    name: darkweb_ollama_models  # pulled LLM weights for RansomChat (Chapter 12)
+  chat_evidence:
+    name: darkweb_chat_evidence  # saved negotiation transcripts
+
+services:
+
+  # ── the gateway ─────────────────────────────────────────────────────────────
+  # Our own image now, not a stock one: it runs tor AND installs the firewall
+  # that forces the workstation's traffic through it. In V4 those were two
+  # containers (dockurr/tor plus a one-shot sidecar). Folding them together is
+  # the whole point of this revision — one gateway, dual-homed, doing both jobs.
+  gateway:
+    profiles: [base]
+    build: ./images/gateway
+    image: darkweb-lab-gateway:5.0
+    pull_policy: build
+    container_name: darkweb-gateway
+    hostname: darkweb-gateway
+    restart: unless-stopped
+
+    cap_add: [NET_ADMIN, NET_RAW]
+
+    # The gateway is a router for the workstation's traffic. Redirected packets
+    # are delivered locally to tor; anything else is rejected in FORWARD, and
+    # forwarding must be on for that rejection to be an explicit, fast REJECT
+    # rather than a silent routing drop.
+    sysctls:
+      net.ipv4.ip_forward: "1"
+
+    environment:
+      # Passed in rather than discovered, so tor binds and the rules match the
+      # exact address compose assigns below — no guessing from `ip addr`.
+      LAB_GATEWAY_IP: 10.152.152.10
+      LAB_INTERNAL_CIDR: 10.152.152.0/24
+      # Hashed into torrc so the workstation's apps can authenticate to the
+      # control port. Optional: absent, the gateway falls back to cookie auth
+      # (local only). ./lab generates it; a bare `docker compose` leaves it empty.
+      LAB_CONTROL_PW: ${LAB_CONTROL_PW:-}
+
+    networks:
+      external:
+      internal:
+        ipv4_address: 10.152.152.10
+
+    volumes:
+      - tor_data:/var/lib/tor
+
+    healthcheck:
+      # Ready means: tor bootstrapped to 100% AND the rules are installed. The
+      # workstation waits for this, so it never comes up able to reach a network
+      # that tor cannot yet carry.
+      test: ["CMD-SHELL", "test -f /run/darkweb/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  # ── the analyst workstation ─────────────────────────────────────────────────
+  workstation:
+    profiles: [base]
+    build:
+      context: ./images/workstation
+      args:
+        BASE_IMAGE: ${LAB_WS_BASE:-ubuntu:noble-20260509.1}
+        # Tor Browser channel is chosen by arch in the Dockerfile: x86_64 uses
+        # the stable version below; arm64 uses the alpha, the only official ARM
+        # build. Override either with LAB_TB_VERSION_X86 / LAB_TB_VERSION_ARM.
+        TB_VERSION_X86: ${LAB_TB_VERSION_X86:-15.0.21}
+        TB_VERSION_ARM: ${LAB_TB_VERSION_ARM:-16.0a9}
+        # Where the workstation's browsers and tools send traffic. Baked in so
+        # proxychains / torsocks / the Tor Browser profile all agree.
+        GATEWAY_IP: 10.152.152.10
+        # The workstation's own internal address, used to repoint OnionShare's
+        # onion target at this host so the gateway's tor can reach its server.
+        WS_IP: 10.152.152.11
+    image: darkweb-lab-workstation:5.0
+    pull_policy: build
+    container_name: darkweb-workstation
+    restart: unless-stopped
+
+    # Needed to replace the default route with the gateway and to install the
+    # egress lock on the access interface. Lab 1.3 reads these rules back.
+    cap_add: [NET_ADMIN]
+
+    networks:
+      internal:
+        ipv4_address: 10.152.152.11
+      deskaccess:
+        ipv4_address: 10.152.153.11
+
+    # The workstation owns its desktop port now. Bound to localhost — never
+    # 0.0.0.0 — because on a VPS that would publish a remote desktop to the
+    # whole internet. Reach it over an SSH tunnel instead.
+    ports:
+      - "127.0.0.1:6901:6901"
+
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+    environment:
+      VNC_PW: ${LAB_VNC_PW:?not set — start with ./lab up, not docker compose}
+      VNC_RESOLUTION: ${LAB_RESOLUTION:-1280x800}
+      # Desktop transport. Default off: plain HTTP on loopback, so the browser
+      # shows no self-signed-certificate warning. Set on to serve HTTPS — do
+      # that if you publish port 6901 beyond localhost.
+      LAB_TLS: ${LAB_TLS:-off}
+      # Consumed by entrypoint.sh to set the route, the resolver and the lock.
+      LAB_GATEWAY_IP: 10.152.152.10
+      LAB_INTERNAL_CIDR: 10.152.152.0/24
+      LAB_DESK_CIDR: 10.152.153.0/24
+      # Authenticates Tor Browser and OnionShare to the gateway's control port,
+      # so they use its tor rather than launching their own (no Tor-over-Tor).
+      LAB_CONTROL_PW: ${LAB_CONTROL_PW:-}
+      TZ: UTC
+
+    shm_size: "1gb"
+
+    volumes:
+      - evidence:/evidence
+      - ws_scratch:/home/darkweb/scratch
+      # the Chapter 9 crawler runs here, reaching the range over the workstation's Tor
+      - ./labs/artifacts/crawler:/opt/crawler:ro
+      - ./labs/artifacts/range-scorer:/opt/range-scorer:ro
+      # the visual intelligence suite from `./lab report`, shared read-only (Ch15)
+      - ./intel:/intel:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:6901 -o /dev/null || curl -skf https://127.0.0.1:6901 -o /dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # ── the lab portal ──────────────────────────────────────────────────────────
+  # Unchanged: internal network only, no published ports. Reached from the
+  # browser inside the desktop at http://10.152.152.20 — the same no-route-out
+  # property Lab 1.2 puts to the test. Same-subnet as the workstation, so this
+  # traffic never touches the gateway or its rules.
+  portal:
+    profiles: [base]
+    image: nginx:1.27-alpine
+    container_name: darkweb-portal
+    hostname: darkweb-portal
+    restart: unless-stopped
+    networks:
+      internal:
+        ipv4_address: 10.152.152.20
+    volumes:
+      - ./site:/usr/share/nginx/html:ro
+      - evidence:/evidence:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Chapter 6 · I2P testnet routers ───────────────────────────────────────────
+  # Built from ./images/i2p. Each router generates its routerInfo, publishes it to
+  # the shared i2p_seed volume, and reseeds from its peers there - there is no live
+  # reseed. ff1/ff2 carry the floodfill flag (they hold the NetDB); r1..r3 are plain
+  # routers. All pin netid 42 and sit on the internal i2pnet, so the testnet is
+  # isolated by construction. NOTE: converging a closed testnet is the fragile part
+  # (see the chapter) - ./lab check 6.1 confirms it on the host.
+  i2p-ff1: &i2p_router
+    profiles: [i2p]
+    build: ./images/i2p
+    image: darkweb-lab-i2p:5.0
+    pull_policy: build
+    container_name: darkweb-i2p-ff1
+    hostname: darkweb-i2p-ff1
+    restart: unless-stopped
+    environment: &i2p_env
+      I2P_NETID: "42"
+      I2P_FLOODFILL: "true"
+      I2P_SEED_DIR: /seed
+      # Floodfills first, with no delay: they hold the NetDB the plain routers
+      # publish into, so a router that arrives before them has nowhere to go.
+      I2P_START_DELAY: "0"
+    networks: [i2pnet]
+    volumes:
+      - i2p_seed:/seed
+      - i2p_ff1:/home/i2pd/data
+    healthcheck:
+      # Healthy means "has peers", nothing softer. The previous version accepted
+      # `test -d netDb`, which the entrypoint creates unconditionally, so every
+      # router reported healthy while its NetDB sat at zero — the check agreed
+      # with the symptom instead of catching it. Count real routerInfo files:
+      # on this i2pd they land as netDb/rX/routerInfo-<hash>.dat, so match *.dat
+      # anywhere beneath. $$ keeps Compose from interpolating the subshell.
+      test: ["CMD-SHELL", "test \"$$(find /home/i2pd/data/netDb -type f -name '*.dat' 2>/dev/null | wc -l)\" -ge 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      # Bootstrap is minting, publishing, waiting for a quorum, building the zip,
+      # starting, and possibly one reseed restart. That is minutes, not seconds.
+      start_period: 300s
+
+  i2p-ff2:
+    <<: *i2p_router
+    container_name: darkweb-i2p-ff2
+    hostname: darkweb-i2p-ff2
+    volumes:
+      - i2p_seed:/seed
+      - i2p_ff2:/home/i2pd/data
+
+  i2p-r1:
+    <<: *i2p_router
+    container_name: darkweb-i2p-r1
+    hostname: darkweb-i2p-r1
+    volumes:
+      - i2p_seed:/seed
+      - i2p_r1:/home/i2pd/data
+    environment:
+      <<: *i2p_env
+      I2P_FLOODFILL: "false"
+      # Plain routers hold back so the floodfills are already publishing when
+      # they arrive; a router that starts first has no NetDB to reach.
+      I2P_START_DELAY: "45"
+
+  i2p-r2:
+    <<: *i2p_router
+    container_name: darkweb-i2p-r2
+    hostname: darkweb-i2p-r2
+    volumes:
+      - i2p_seed:/seed
+      - i2p_r2:/home/i2pd/data
+    environment:
+      <<: *i2p_env
+      I2P_FLOODFILL: "false"
+      I2P_START_DELAY: "45"
+
+  i2p-r3:
+    <<: *i2p_router
+    container_name: darkweb-i2p-r3
+    hostname: darkweb-i2p-r3
+    volumes:
+      - i2p_seed:/seed
+      - i2p_r3:/home/i2pd/data
+    environment:
+      <<: *i2p_env
+      I2P_FLOODFILL: "false"
+      I2P_START_DELAY: "45"
+
+  # ── Chapter 7 · Hyphanet darknet testnet nodes ────────────────────────────────
+  # Built from ./images/hyphanet. Each node runs with opennet DISABLED (darknet
+  # only), publishes its own node reference into the shared fn_seed volume, and adds
+  # its peers' references from there — the manual friend-exchange that darknet
+  # requires, automated for the lab. All sit on the internal fnnet, so the testnet
+  # is isolated by construction. NOTE: provisioning the Hyphanet (Fred) runtime and
+  # the noderef exchange is the fragile part — even more host-sensitive than i2pd,
+  # since there is no canonical Hyphanet image. ./lab check 7.1 confirms it on the
+  # host; expect to tune the seed step and the release URL per version.
+  fn-n1: &fn_node
+    profiles: [hyphanet]
+    build: ./images/hyphanet
+    image: darkweb-lab-hyphanet:5.0
+    pull_policy: build
+    container_name: darkweb-fn-n1
+    hostname: darkweb-fn-n1
+    restart: unless-stopped
+    environment: &fn_env
+      FN_OPENNET: "false"
+      FN_SEED_DIR: /seed
+      FN_STORE_SIZE: 512M
+    networks: [fnnet]
+    volumes:
+      - fn_seed:/seed
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8888/ >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+
+  fn-n2:
+    <<: *fn_node
+    container_name: darkweb-fn-n2
+    hostname: darkweb-fn-n2
+
+  fn-n3:
+    <<: *fn_node
+    container_name: darkweb-fn-n3
+    hostname: darkweb-fn-n3
+
+  fn-n4:
+    <<: *fn_node
+    container_name: darkweb-fn-n4
+    hostname: darkweb-fn-n4
+
+  # ── Chapter 8 · Simulated darknet range ───────────────────────────────────────
+  # A self-contained darknet the reader hosts: a directory, market, forum, leak
+  # site, paste bin, a market mirror (same content, different onion) and a market
+  # CLONE (look-alike, altered pgp+btc). All content is synthetic and watermarked
+  # by the seed generator. range-tor generates the content into range_content, then
+  # publishes an onion per service (mirror -> same backend as market; clone -> the
+  # clone backend). Onion keys are NOT persisted, so addresses are ephemeral.
+  # NOTE: the range's Docker/Tor/nginx wiring is static-checked only; the scorer and
+  # content generator (labs/artifacts/range-*) run and self-test. ./lab check 8.1
+  # confirms publication + watermarking on the host.
+  range-tor:
+    profiles: [range]
+    build: ./images/range
+    image: darkweb-lab-range:5.0
+    pull_policy: build
+    container_name: darkweb-range-tor
+    hostname: darkweb-range-tor
+    restart: unless-stopped
+    environment:
+      RANGE_SEED_DIR: /content
+      RANGE_WEB: range-web
+      RANGE_WEB_CLONE: range-web-clone
+    networks: [external, rangenet]
+    volumes:
+      - range_content:/content
+      - ./labs/artifacts/range-content/seed.py:/opt/seed.py:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -s /content/onions.env || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  range-web:
+    profiles: [range]
+    image: nginx:alpine
+    container_name: darkweb-range-web
+    hostname: darkweb-range-web
+    restart: unless-stopped
+    depends_on: [range-tor]
+    networks: [rangenet]
+    volumes:
+      - range_content:/content:ro
+      - ./images/range/nginx-range.conf:/etc/nginx/conf.d/default.conf:ro
+
+  range-web-clone:
+    profiles: [range]
+    image: nginx:alpine
+    container_name: darkweb-range-web-clone
+    hostname: darkweb-range-web-clone
+    restart: unless-stopped
+    depends_on: [range-tor]
+    networks: [rangenet]
+    volumes:
+      - range_content:/content:ro
+      - ./images/range/nginx-range.conf:/etc/nginx/conf.d/default.conf:ro
+
+  # ── RansomChat (Chapter 12) — negotiation training simulator ────────────────
+  # Defensive training only. Its own profile, never brought up by default:
+  #   ./lab ransomchat up    then    ./lab ransomchat pull
+  # The operator is seeded from the Casualtek behaviour DB and refuses real
+  # attack help. The reader plays the victim's negotiator.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: darkweb-ollama
+    profiles: ["ransomchat"]
+    networks: [chatnet]
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+  ransomchat:
+    build: ./images/ransomchat
+    image: darkweb-lab-ransomchat:5.0
+    container_name: darkweb-ransomchat
+    profiles: ["ransomchat"]
+    depends_on: [ollama]
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${LAB_CHAT_MODEL:-llama3.1:8b}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      XAI_MODEL: ${XAI_MODEL:-grok-2-latest}
+      CHAT_DB: /app/negotiations.db
+      CHAT_SAVE_DIR: /evidence/negotiations
+    volumes:
+      - ./labs/artifacts/ransomchat/negotiations.db:/app/negotiations.db:ro
+      - chat_evidence:/evidence/negotiations
+    ports:
+      - "127.0.0.1:8090:8090"
+    networks: [chatnet]
+    restart: unless-stopped

@@ -1,0 +1,20 @@
+{
+  "range": "simulated-darknet",
+  "note": "Ground truth for the range. Addresses are ephemeral placeholders here; the live range fills real onion addresses on bring-up. Relationships (mirror/clone/altered/cross-link) are the stable truth the scorer grades against.",
+  "logical_services": ["directory", "market", "forum", "leak", "paste"],
+  "addresses": {
+    "addr-directory":      {"service": "directory", "in_directory": true},
+    "addr-market":         {"service": "market", "in_directory": true, "pgp": "9A3F", "btc": "bc1q_market_k7"},
+    "addr-forum":          {"service": "forum", "in_directory": true},
+    "addr-leak":           {"service": "leak", "in_directory": false},
+    "addr-paste":          {"service": "paste", "in_directory": false},
+    "addr-market-mirror":  {"service": "market", "mirror": true, "in_directory": true},
+    "addr-market-clone":   {"service": "market", "clone": true, "altered": ["pgp", "btc"],
+                            "genuine_pgp": "9A3F", "genuine_btc": "bc1q_market_k7",
+                            "clone_pgp": "2E77", "clone_btc": "bc1q_clone_z9", "in_directory": false}
+  },
+  "cross_links": [
+    {"from": "market",    "network": "i2p",      "kind": "eepsite-mirror"},
+    {"from": "directory", "network": "hyphanet", "kind": "freesite-archive"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "note": "A sample crawl output for ./lab range score. Good coverage but fooled by the clone: it missed the paste service, invented two off-range addresses, collapsed the mirror correctly, and reported the clone as a genuine service, trusting its swapped coin address.",
+  "discovered": [
+    {"address": "addr-directory",     "role": "service"},
+    {"address": "addr-market",        "role": "service", "pgp": "9A3F", "btc": "bc1q_market_k7"},
+    {"address": "addr-forum",         "role": "service"},
+    {"address": "addr-leak",          "role": "service"},
+    {"address": "addr-market-mirror", "role": "mirror",  "same_as": "addr-market"},
+    {"address": "addr-market-clone",  "role": "service", "pgp": "2E77", "btc": "bc1q_clone_z9"},
+    {"address": "addr-noise-1",       "role": "service"},
+    {"address": "addr-noise-2",       "role": "service"}
+  ]
+}

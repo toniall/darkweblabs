@@ -1,0 +1,16 @@
+{
+  "name": "report ground truth",
+  "chapter": 15,
+  "summary": "The answer key for the capstone report: the claims a defensible brief on Operator Alpha should make, each with the TYPE (fact/assessment/assumption) and CONFIDENCE (high/moderate/low) the chained evidence actually supports. A report is graded not on whether it states the findings — assembling the facts is the easy part — but on whether it preserves their sourcing and calibration. The dangerous error is OVERCLAIMING: presenting a claim more strongly than the evidence licenses (an assessment as a fact, a low- or moderate-confidence judgement as high) or with no provenance to check.",
+  "claims": [
+    {"id": "identity",         "type": "assessment", "confidence": "high",     "note": "held by a shared signed key (hard identifier)"},
+    {"id": "volume_bluff",     "type": "assessment", "confidence": "high",     "note": "public claim vs privately proven sample"},
+    {"id": "follow_through",   "type": "fact",       "confidence": "high",     "note": "observed publication across snapshots"},
+    {"id": "resurface",        "type": "assessment", "confidence": "high",     "note": "signed-key watchlist match"},
+    {"id": "clone",            "type": "fact",       "confidence": "high",     "note": "observed look-alike with swapped key"},
+    {"id": "timezone",         "type": "assessment", "confidence": "low",      "note": "single soft signal — a rhythm hint"},
+    {"id": "rebrand",          "type": "assessment", "confidence": "moderate", "note": "two circumstantial signals, no direct evidence"},
+    {"id": "do_not_attribute", "type": "assessment", "confidence": "high",     "note": "displayed-not-controlled key; negative finding"}
+  ],
+  "notes": "Six claims are supported at high confidence, one (rebrand) at moderate, one (timezone) at low; two (follow_through, clone) are facts, the rest assessments. A naive assembler that flattens every claim to a sourceless high-confidence fact still covers all eight but strips all provenance, miscalibrates the moderate and low claims, and overclaims every assessment it presents as fact."
+}

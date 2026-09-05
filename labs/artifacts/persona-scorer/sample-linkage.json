@@ -1,0 +1,106 @@
+{
+  "personas": [
+    {
+      "handle": "BlackVault",
+      "surface": "leak"
+    },
+    {
+      "handle": "IronVault",
+      "surface": "leak"
+    },
+    {
+      "handle": "Mimic",
+      "surface": "market"
+    },
+    {
+      "handle": "n1ghthawk",
+      "surface": "forum"
+    },
+    {
+      "handle": "NightHawk",
+      "surface": "market"
+    },
+    {
+      "handle": "Nighthawke",
+      "surface": "forum"
+    },
+    {
+      "handle": "RedLattice",
+      "surface": "leak"
+    },
+    {
+      "handle": "SaltMine",
+      "surface": "market"
+    }
+  ],
+  "clusters": [
+    {
+      "operator": "op-1",
+      "personas": [
+        "BlackVault",
+        "NightHawk",
+        "RedLattice",
+        "n1ghthawk"
+      ],
+      "confidence": "high",
+      "signals": [
+        "handle_transform",
+        "rhythm",
+        "shared_signed_key",
+        "shared_wallet",
+        "stylometry",
+        "tactic_sequence"
+      ]
+    },
+    {
+      "operator": "op-2",
+      "personas": [
+        "IronVault",
+        "SaltMine"
+      ],
+      "confidence": "medium",
+      "signals": [
+        "rhythm",
+        "stylometry"
+      ]
+    },
+    {
+      "operator": "op-3",
+      "personas": [
+        "Mimic"
+      ],
+      "confidence": "single",
+      "signals": []
+    },
+    {
+      "operator": "op-4",
+      "personas": [
+        "Nighthawke"
+      ],
+      "confidence": "single",
+      "signals": []
+    }
+  ],
+  "framing_flags": [
+    {
+      "a": "BlackVault",
+      "b": "Mimic",
+      "note": "key displayed, not controlled \u2014 possible framing"
+    },
+    {
+      "a": "Mimic",
+      "b": "NightHawk",
+      "note": "key displayed, not controlled \u2014 possible framing"
+    },
+    {
+      "a": "Mimic",
+      "b": "RedLattice",
+      "note": "key displayed, not controlled \u2014 possible framing"
+    },
+    {
+      "a": "Mimic",
+      "b": "n1ghthawk",
+      "note": "key displayed, not controlled \u2014 possible framing"
+    }
+  ]
+}

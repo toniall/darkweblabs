@@ -1,0 +1,204 @@
+{
+  "listings": [
+    {
+      "listing_id": 1001,
+      "title": "sealed hardware wallet",
+      "vendor": "NightHawk",
+      "category": "hardware",
+      "price": 180.0,
+      "currency": "USD",
+      "ships_from": "EU",
+      "ships_to": "worldwide",
+      "terms": "escrow, 2-of-3",
+      "_file": "listing-1001.html"
+    },
+    {
+      "listing_id": 1002,
+      "title": "encrypted phone, wiped",
+      "vendor": "NightHawk",
+      "category": "hardware",
+      "price": 340.0,
+      "currency": "USD",
+      "ships_from": "EU",
+      "ships_to": "EU",
+      "terms": "escrow",
+      "_file": "listing-1002.html"
+    },
+    {
+      "listing_id": 1003,
+      "title": "novelty ID template pack",
+      "vendor": "PaperTrail",
+      "category": "digital",
+      "price": 45.0,
+      "currency": "USD",
+      "ships_from": "n/a",
+      "ships_to": "worldwide",
+      "terms": "digital delivery, no refunds",
+      "_file": "listing-1003-v2.html"
+    },
+    {
+      "listing_id": 1003,
+      "title": "novelty ID template pack",
+      "vendor": "PaperTrail",
+      "category": "digital",
+      "price": 45.0,
+      "currency": "USD",
+      "ships_from": "n/a",
+      "ships_to": "worldwide",
+      "terms": "digital delivery, no refunds",
+      "_file": "listing-1003.html"
+    },
+    {
+      "listing_id": 1004,
+      "title": "gift card codes, bulk",
+      "vendor": "GreyOwl",
+      "category": "digital",
+      "price": 90.0,
+      "currency": "USD",
+      "ships_from": "n/a",
+      "ships_to": "worldwide",
+      "terms": "instant, tiered",
+      "_file": "listing-1004.html"
+    },
+    {
+      "listing_id": 1005,
+      "title": "hardware wallet, sealed",
+      "vendor": "SaltMine",
+      "category": "hardware",
+      "price": 25.0,
+      "currency": "USD",
+      "ships_from": "EU",
+      "ships_to": "worldwide",
+      "terms": "finalize early, no escrow",
+      "_file": "listing-1005.html"
+    },
+    {
+      "listing_id": 1006,
+      "title": "sealed hardware wallet",
+      "vendor": "Mimic",
+      "category": "hardware",
+      "price": 180.0,
+      "currency": "USD",
+      "ships_from": "EU",
+      "ships_to": "worldwide",
+      "terms": "escrow, 2-of-3",
+      "_file": "listing-1006.html"
+    }
+  ],
+  "vendors": [
+    {
+      "handle": "GreyOwl",
+      "pgp": "7C10FF93AB24EE6B1A80",
+      "rating": 4.9,
+      "join_date": "2019-06",
+      "feedback_count": 891,
+      "feedback_dates": [
+        "2020-01-02",
+        "2021-06-14",
+        "2022-03-30",
+        "2023-08-01",
+        "2025-05-12"
+      ],
+      "_file": "vendor-greyowl.html"
+    },
+    {
+      "handle": "Mimic",
+      "pgp": "9A3F1C4D7E20B5F8C6D1",
+      "rating": 4.2,
+      "join_date": "2026-06-30",
+      "feedback_count": 58,
+      "feedback_dates": [
+        "2026-07-01",
+        "2026-07-08",
+        "2026-07-15",
+        "2026-07-20",
+        "2026-07-28"
+      ],
+      "_file": "vendor-mimic.html"
+    },
+    {
+      "handle": "NightHawk",
+      "pgp": "9A3F1C4D7E20B5F8C6D1",
+      "rating": 4.8,
+      "join_date": "2021-03",
+      "feedback_count": 342,
+      "feedback_dates": [
+        "2021-05-02",
+        "2022-01-14",
+        "2023-07-30",
+        "2024-11-01",
+        "2025-09-12"
+      ],
+      "_file": "vendor-nighthawk.html"
+    },
+    {
+      "handle": "PaperTrail",
+      "pgp": "2E77A0B9C31DFA45E9C2",
+      "rating": 4.6,
+      "join_date": "2020-11",
+      "feedback_count": 518,
+      "feedback_dates": [
+        "2021-02-02",
+        "2022-06-14",
+        "2023-03-30",
+        "2024-08-01",
+        "2025-12-12"
+      ],
+      "_file": "vendor-papertrail.html"
+    },
+    {
+      "handle": "SaltMine",
+      "pgp": "B4D2091AC7E63F5108AA",
+      "rating": 5.0,
+      "join_date": "2026-07-25",
+      "feedback_count": 500,
+      "feedback_dates": [
+        "2026-07-25",
+        "2026-07-25",
+        "2026-07-26",
+        "2026-07-26",
+        "2026-07-27"
+      ],
+      "_file": "vendor-saltmine.html"
+    }
+  ],
+  "defenses": {
+    "wall-captcha.html": {
+      "kind": "captcha",
+      "action": "queue"
+    },
+    "wall-429.html": {
+      "kind": "rate_limited",
+      "action": "backoff"
+    },
+    "catalogue-poisoned.html": {
+      "kind": "poisoned",
+      "action": "skip"
+    }
+  },
+  "honeypots_skipped": [
+    "/trap/9f2a"
+  ],
+  "honeypots_followed": [],
+  "poisoned_extracted": [],
+  "flags": {
+    "resale_rings": [
+      [
+        1001,
+        1006
+      ]
+    ],
+    "borrowed_keys": [
+      [
+        "Mimic",
+        "NightHawk"
+      ]
+    ],
+    "gamed_reputation": [
+      "SaltMine"
+    ],
+    "scam_prices": [
+      1005
+    ]
+  }
+}

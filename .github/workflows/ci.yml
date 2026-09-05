@@ -1,0 +1,98 @@
+# Unlock the Secrets of the DARK WEB, Volume 2 | Antonio Brandao, Author | August 2026
+name: CI
+
+# Runs on every push and pull request. Two independent jobs:
+#
+#   offline  — everything that needs no Docker: repo consistency, every engine's
+#              self-test, and every Docker-free lab check. Fast and reliable; this
+#              is the job that catches chapter <-> repo drift on each commit.
+#   images   — builds the container images fresh and smoke-tests the exact tools
+#              the labs depend on, so a Dockerfile that no longer provides what a
+#              chapter documents fails here instead of in a reader's terminal.
+#
+# The `offline` job is the one that would have caught this project's real
+# regressions early; the `images` job is heavier (it pulls base images and, for
+# the workstation, Tor Browser) and is the belt-and-braces check on the Dockerfiles.
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    name: Offline — selftest, engine self-tests, Docker-free checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Make the lab CLI and checks executable
+        run: chmod +x lab labs/checks/*.sh
+
+      # Repo consistency (incl. the "one marker per fix that has bitten us"),
+      # every offline engine self-test, and every Docker-free lab check.
+      # Exits non-zero if anything drifted or broke.
+      - name: ./lab ci
+        run: ./lab ci
+
+  images:
+    name: Images — build fresh + tool smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # --- gateway: alpine, fast. This is where the tcpdump regression lived. ---
+      - name: Build the gateway image
+        run: docker build -t darkweb-lab-gateway:ci images/gateway
+
+      - name: Gateway provides the tools Chapter 2 and check 5.1 use
+        run: |
+          # --entrypoint is required: the image's ENTRYPOINT is the gateway boot
+          # script, so without it `sh -c ...` is passed to that script as
+          # arguments and the container tries to install its firewall instead.
+          # CI has no NET_ADMIN, so iptables fails and the step exits 4.
+          docker run --rm --entrypoint sh darkweb-lab-gateway:ci \
+            -c 'command -v tcpdump && command -v tor && command -v iptables'
+
+      # --- workstation: heavier (Kasm base + Tor Browser download). This is where
+      #     the missing sudo password lived. Build args mirror compose.yml. ---
+      - name: Build the workstation image
+        run: |
+          docker build \
+            --build-arg BASE_IMAGE=ubuntu:noble-20260509.1 \
+            --build-arg TB_VERSION_X86=15.0.19 \
+            --build-arg TB_VERSION_ARM=16.0a9 \
+            -t darkweb-lab-workstation:ci images/workstation
+
+      - name: Workstation analyst account has a usable sudo password
+        run: |
+          # A set password's shadow field starts with '$' (a hash); an unset or
+          # locked account shows '!' or '*'. This guards the Ch2 nmap/proxychains
+          # install steps, which need sudo to authenticate.
+          # --entrypoint for the same reason as the gateway check above.
+          docker run --rm --user root --entrypoint sh darkweb-lab-workstation:ci \
+            -c 'test "$(getent shadow darkweb | cut -d: -f2 | cut -c1)" = "$"'
+
+      # --- overlay images: build to catch Dockerfile breakage (no smoke needed). ---
+      - name: Build the overlay images (i2p, hyphanet, range)
+        run: |
+          docker build -t darkweb-lab-i2p:ci      images/i2p
+          docker build -t darkweb-lab-hyphanet:ci images/hyphanet
+          docker build -t darkweb-lab-range:ci    images/range
+
+      # --- ransomchat: this is where the mid-negotiation re-anchoring lived. ---
+      - name: Build the RansomChat image
+        run: docker build -t darkweb-lab-ransomchat:ci images/ransomchat
+
+      - name: RansomChat ships its session module and guards its replies
+        run: |
+          docker run --rm darkweb-lab-ransomchat:ci python3 session.py --selftest
+          docker run --rm darkweb-lab-ransomchat:ci \
+            python3 -c 'import app; assert app.STORE is not None'

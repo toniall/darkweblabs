@@ -1,0 +1,8 @@
+# Unlock the Secrets of the DARK WEB, Volume 2 | Antonio Brandao, Author | August 2026
+# Spell-check config for `codespell`. Data/fixtures are skipped (the labs hash
+# them). The ignore list holds verified non-typos: intentional stylometric
+# markers (thats), regex fragments (delet(e|ion)), a correct word (retuned =
+# re-tuned), and minified-JS identifiers (ser = series, nd).
+[codespell]
+skip = *.db,*.json,*.txt,*.png,*.svg,*.xlsx,*.pyc,.git,./labs/artifacts/*/corpus/*,./site/assets/img/README.md,./labs/datasets/*
+ignore-words-list = retuned,thats,ser,nd,delet,te,ans,fo,nin

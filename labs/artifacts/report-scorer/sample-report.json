@@ -1,0 +1,195 @@
+{
+  "target": "Operator Alpha",
+  "bluf": "With high confidence, Operator Alpha operates a market vendor and two leak brands under one signed key and has resurfaced under a new persona after going dark; lower-confidence indicators point to a rebrand in progress. Confidence and sourcing are stated per finding below.",
+  "findings": [
+    {
+      "id": "clone",
+      "statement": "A clone, NightHawkMkt-x, is impersonating Alpha's market using a swapped key and wallet.",
+      "type": "fact",
+      "confidence": "high",
+      "basis": "observed_event",
+      "provenance": {
+        "engine": "detection",
+        "artifact": "new_clone",
+        "why": "a look-alike site appeared carrying a different key from the original"
+      },
+      "falsifier": "the swapped key on NightHawkMkt-x proves to be Alpha rotating its own infrastructure"
+    },
+    {
+      "id": "do_not_attribute",
+      "statement": "The persona Mimic displays Alpha's key but signs its own; it is a separate operator, and its activity must not be attributed to Alpha.",
+      "type": "assessment",
+      "confidence": "high",
+      "basis": "hard_identifier",
+      "provenance": {
+        "engine": "persona-linkage",
+        "artifact": "framing_flags",
+        "why": "a displayed key is not a control proof; merging on it would be a false accusation"
+      },
+      "falsifier": "Mimic is shown to sign with Alpha's key"
+    },
+    {
+      "id": "follow_through",
+      "statement": "Alpha published Meridian Health after threatening regulator notification; that threat was carried out and was not a bluff.",
+      "type": "fact",
+      "confidence": "high",
+      "basis": "observed_event",
+      "provenance": {
+        "engine": "leak-negotiation",
+        "artifact": "lifecycle",
+        "why": "the victim's status moved from countdown to published across the snapshots"
+      },
+      "falsifier": "the published archive proves fabricated or recycled"
+    },
+    {
+      "id": "identity",
+      "statement": "Operator Alpha operates the market vendor NightHawk, the leak brands BlackVault and RedLattice, and the forum persona n1ghthawk.",
+      "type": "assessment",
+      "confidence": "high",
+      "basis": "hard_identifier",
+      "provenance": {
+        "engine": "persona-linkage",
+        "artifact": "fuse",
+        "why": "one signed key (F19B7A0C4E82D5613FA0) and a shared wallet control all four personas"
+      },
+      "falsifier": "the shared key is shown to be displayed-not-controlled on one of the brands"
+    },
+    {
+      "id": "resurface",
+      "statement": "Alpha has resurfaced under the new forum persona n1ghthawk2, signing with the key it is already known by, after its market went dark.",
+      "type": "assessment",
+      "confidence": "high",
+      "basis": "hard_identifier",
+      "provenance": {
+        "engine": "detection",
+        "artifact": "operator_resurface",
+        "why": "the new persona's signed key matches the watched operator's key"
+      },
+      "falsifier": "the key on n1ghthawk2 proves stolen or merely displayed, not controlled"
+    },
+    {
+      "id": "volume_bluff",
+      "statement": "Alpha inflated its extortion of Northwind Logistics \u2014 claiming far more data publicly than it proved privately (a volume bluff).",
+      "type": "assessment",
+      "confidence": "high",
+      "basis": "hard_identifier",
+      "provenance": {
+        "engine": "leak-negotiation",
+        "artifact": "correlate",
+        "why": "the public claim exceeds the privately proven sample by more than fivefold"
+      },
+      "falsifier": "a fuller proof surfaces that matches the public claim"
+    },
+    {
+      "id": "rebrand",
+      "statement": "Alpha's market going dark together with the appearance of a clone suggests a possible rebrand or infrastructure migration in progress.",
+      "type": "assessment",
+      "confidence": "moderate",
+      "basis": "indirect_signals",
+      "provenance": {
+        "engine": "detection",
+        "artifact": "market_down + new_clone",
+        "why": "two circumstantial signals point the same way, with no direct evidence of intent"
+      },
+      "falsifier": "the original market returns unchanged and the clone is abandoned"
+    },
+    {
+      "id": "timezone",
+      "statement": "Alpha's operator likely works in a UTC+2 to UTC+3 timezone band.",
+      "type": "assessment",
+      "confidence": "low",
+      "basis": "single_soft_signal",
+      "provenance": {
+        "engine": "persona-linkage",
+        "artifact": "behavior",
+        "why": "the activity-rhythm histogram clusters in those hours \u2014 a hint, not a fingerprint"
+      },
+      "falsifier": "activity spreads across the histogram, or scheduled automation is evident"
+    }
+  ],
+  "what_would_change": [
+    {
+      "id": "clone",
+      "falsifier": "the swapped key on NightHawkMkt-x proves to be Alpha rotating its own infrastructure"
+    },
+    {
+      "id": "do_not_attribute",
+      "falsifier": "Mimic is shown to sign with Alpha's key"
+    },
+    {
+      "id": "follow_through",
+      "falsifier": "the published archive proves fabricated or recycled"
+    },
+    {
+      "id": "identity",
+      "falsifier": "the shared key is shown to be displayed-not-controlled on one of the brands"
+    },
+    {
+      "id": "resurface",
+      "falsifier": "the key on n1ghthawk2 proves stolen or merely displayed, not controlled"
+    },
+    {
+      "id": "volume_bluff",
+      "falsifier": "a fuller proof surfaces that matches the public claim"
+    },
+    {
+      "id": "rebrand",
+      "falsifier": "the original market returns unchanged and the clone is abandoned"
+    },
+    {
+      "id": "timezone",
+      "falsifier": "activity spreads across the histogram, or scheduled automation is evident"
+    }
+  ],
+  "annex": [
+    {
+      "id": "clone",
+      "engine": "detection",
+      "artifact": "new_clone",
+      "why": "a look-alike site appeared carrying a different key from the original"
+    },
+    {
+      "id": "do_not_attribute",
+      "engine": "persona-linkage",
+      "artifact": "framing_flags",
+      "why": "a displayed key is not a control proof; merging on it would be a false accusation"
+    },
+    {
+      "id": "follow_through",
+      "engine": "leak-negotiation",
+      "artifact": "lifecycle",
+      "why": "the victim's status moved from countdown to published across the snapshots"
+    },
+    {
+      "id": "identity",
+      "engine": "persona-linkage",
+      "artifact": "fuse",
+      "why": "one signed key (F19B7A0C4E82D5613FA0) and a shared wallet control all four personas"
+    },
+    {
+      "id": "resurface",
+      "engine": "detection",
+      "artifact": "operator_resurface",
+      "why": "the new persona's signed key matches the watched operator's key"
+    },
+    {
+      "id": "volume_bluff",
+      "engine": "leak-negotiation",
+      "artifact": "correlate",
+      "why": "the public claim exceeds the privately proven sample by more than fivefold"
+    },
+    {
+      "id": "rebrand",
+      "engine": "detection",
+      "artifact": "market_down + new_clone",
+      "why": "two circumstantial signals point the same way, with no direct evidence of intent"
+    },
+    {
+      "id": "timezone",
+      "engine": "persona-linkage",
+      "artifact": "behavior",
+      "why": "the activity-rhythm histogram clusters in those hours \u2014 a hint, not a fingerprint"
+    }
+  ],
+  "boundary": "This report attributes to Operator Alpha \u2014 a cluster of pseudonyms \u2014 at the confidence stated per finding. It does NOT identify a natural person; the step from an operator to a named individual is a legal and law-enforcement process, out of scope by design."
+}

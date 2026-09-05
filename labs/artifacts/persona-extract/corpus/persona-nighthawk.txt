@@ -1,0 +1,10 @@
+=== SYNTHETIC LAB DATA — persona profile ===
+persona: NightHawk
+surface: market
+displayed_keys: F19B7A0C4E82D5613FA0
+signed_keys: F19B7A0C4E82D5613FA0
+wallets: bc1qsynth0laba0000000000000000000000zzzz
+active_hours: 22,23,0,1,23,22,0,1,2,23
+tactics: 
+--- posts ---
+We stand behind every listing; moreover the escrow terms are fixed and shall not be revised. Whilst disputes are rare, hence we resolve them within the day. Our reputation is earned; it is not negotiated. We ship once payment clears; moreover we confirm dispatch, hence there is no doubt.

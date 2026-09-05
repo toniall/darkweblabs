@@ -1,0 +1,17 @@
+{
+  "name": "leak-extract",
+  "chapter": 12,
+  "summary": "The Chapter 12 extortion-operation extractor across two surfaces: leak-site victim parsing, snapshot-diff lifecycle, cross-site repost mirror/clone detection, negotiation-transcript arc + tactic extraction, and a public-vs-private bluff cross-check — graded by the leak scorer.",
+  "modules": {
+    "victims.py": "Leak-site victim-entry parser to a typed record, with class-then-label resilience (reuses Ch11 listing helpers) so a leak-site restyle does not empty fields.",
+    "lifecycle.py": "Diffs leak-site snapshots per victim to classify transitions and surface countdown theatre (slid deadlines) and quiet withdrawals.",
+    "reposts.py": "Detects a victim reposted across sites and calls it a mirror (affiliate movement, same claim) or clone (recycled/inflated claim), reusing the Ch10 shingler.",
+    "negotiation.py": "Parses a negotiation transcript into an arc (opening, offers, proof, settlement, outcome) and classifies operator tactics.",
+    "correlate.py": "Cross-checks a victim's public claim against its private transcript to flag bluffs: slid-deadline theatre, inflated volume, sold-as-leverage, unverifiable deletion.",
+    "pipeline.py": "Runs the whole extraction over the corpus (naive vs full); --selftest grades itself with the leak scorer."
+  },
+  "corpus": "corpus/ — the leak lab: a dedicated leak site (RedLattice) at two snapshots with victim entries and indexes, a markup-drift variant, a rebrand site (BlackVault) reposting two victims (one mirror, one inflated clone), and four negotiation transcripts. All watermarked synthetic.",
+  "selftests": ["victims.py --selftest", "lifecycle.py --selftest", "reposts.py --selftest", "negotiation.py --selftest", "correlate.py --selftest", "pipeline.py --selftest"],
+  "reuses": "../market-extract/store.py (content-addressed page store) + ../market-extract/listings.py (field helpers); ../dedup/shingle.py (repost similarity)",
+  "consumed_by": "../leak-scorer/scorer.py (victim field recall, completeness, lifecycle/repost/tactic/bluff recall)"
+}

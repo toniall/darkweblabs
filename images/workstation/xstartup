@@ -1,0 +1,52 @@
+#!/bin/sh
+# TigerVNC session start.
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+# ─── clipboard ────────────────────────────────────────────────────────────────
+# vncconfig is what actually bridges the X selections to the VNC protocol.
+# Without it the clipboard panel in the browser appears to work and moves
+# nothing — the panel is only a text box; something has to own the selection.
+vncconfig -nowin &
+
+# X has two selections and they are not the same thing: PRIMARY (middle-click)
+# and CLIPBOARD (Ctrl+C). autocutsel bridges each one to the cut buffer, which
+# is what makes the two gestures agree.
+#
+# PRIMARY only. vncconfig already owns CLIPBOARD for the VNC bridge, and a
+# second owner re-asserting it from the cut buffer can overwrite text that has
+# just arrived from the browser — a paste that lands empty or stale, which is
+# harder to diagnose than one that plainly does nothing.
+autocutsel -selection PRIMARY -fork
+
+# ─── wallpaper ────────────────────────────────────────────────────────────────
+# The monitor name is not known until the session exists, so set every backdrop
+# property XFCE has registered. Style 5 is zoomed: scale and crop to fill,
+# which suits a square source on a widescreen desktop.
+if [ -f /usr/share/backgrounds/darkweb.png ]; then
+  ( sleep 4
+    for p in $(xfconf-query -c xfce4-desktop -l 2>/dev/null \
+                | grep -E '/backdrop/screen0/.*/workspace0/last-image'); do
+      xfconf-query -c xfce4-desktop -p "$p" \
+        -s /usr/share/backgrounds/darkweb.png 2>/dev/null
+      xfconf-query -c xfce4-desktop -p "${p%/last-image}/image-style" \
+        -n -t int -s 5 2>/dev/null
+    done ) &
+fi
+
+# ─── desktop icons ────────────────────────────────────────────────────────────
+# Pin a single icon size so the launcher row renders evenly. Without it, a
+# launcher that falls back to a themed icon can land at a different intrinsic
+# size and the row looks ragged — the mismatched-icons complaint. The launchers
+# now point at absolute icon paths (see the .desktop files), so they resolve
+# regardless of which icon theme the base image ships.
+( sleep 4
+  xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -n -t int -s 48 2>/dev/null
+  xfconf-query -c xfce4-desktop -p /desktop-icons/style     -n -t int -s 2  2>/dev/null
+  # A complete icon theme so the special icons (File System, Home, Trash) all
+  # resolve at the same size — the default theme renders "computer" smaller than
+  # "user-home". Adwaita ships with GTK and has every standard icon.
+  xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s "Adwaita" 2>/dev/null
+) &
+
+exec dbus-launch --exit-with-session startxfce4

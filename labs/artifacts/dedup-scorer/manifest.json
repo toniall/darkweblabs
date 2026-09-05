@@ -1,0 +1,21 @@
+{
+  "name": "clone-lab ground truth",
+  "chapter": 10,
+  "summary": "The answer key for the clone-lab corpus: which look-alikes are same-operator mirrors, which are impersonating clones, and which similar-looking pages are genuinely different services that must NOT be merged.",
+  "directory": ["market.html", "forum.html", "paste.html", "other-market.html"],
+  "clusters": {
+    "market": {
+      "canonical": "market.html",
+      "mirrors": ["market-mirror-exact.html", "market-mirror-banner.html"],
+      "clones":  ["market-clone-keyswap.html", "market-clone-keyless.html"]
+    },
+    "forum": {
+      "canonical": "forum.html",
+      "mirrors": ["forum-mirror.html"],
+      "clones":  []
+    },
+    "paste":  {"canonical": "paste.html",  "mirrors": [], "clones": []},
+    "other":  {"canonical": "other-market.html", "mirrors": [], "clones": []}
+  },
+  "notes": "other-market.html shares the market's template but is a different operator (own assets, own keys, different listings) — merging it into the market cluster is a false merge. market-clone-keyless.html is reworded and shows no keys, so only shared assets + structure identify it."
+}

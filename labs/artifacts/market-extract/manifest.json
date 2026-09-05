@@ -1,0 +1,17 @@
+{
+  "name": "market-extract",
+  "chapter": 11,
+  "summary": "The Chapter 11 market extractor: a content-addressed page store, resilient listing/vendor parsers, detect-only anti-crawling countermeasures, and a vendor/reputation graph — turning collected pages into structured, adversarially-aware intelligence, graded by the market scorer.",
+  "modules": {
+    "store.py": "Content-addressed page-body store (the component Chapter 10 lacked): byte-identical mirrors collapse to one object using the Chapter 9 content hash; provenance kept separately; exports bodies for the Chapter 10 detector.",
+    "listings.py": "Listing-detail parser to a typed record, with class-then-label resilience so markup drift does not silently drop fields.",
+    "vendors.py": "Vendor-profile parser (handle, PGP fingerprint, rating, join date, feedback), reusing the listing field helpers.",
+    "defenses.py": "Anti-crawling detection — CAPTCHA (queued for a human, NEVER solved), rate limits (back off), honeypot links (skip), poisoned catalogues (refuse). No solver exists in the module by construction.",
+    "graph.py": "Vendor/listing/category graph with adversarial checks: resale rings (reusing the Ch10 shingler under union-find), borrowed keys (shared fingerprints), gamed reputation (feedback velocity), and bait prices.",
+    "pipeline.py": "Runs the whole extraction over a corpus (naive vs full); --selftest grades itself with the market scorer."
+  },
+  "corpus": "corpus/ — the market lab: category index + pages, listing details, vendor profiles, one markup-drift variant, a byte-identical category mirror, and the adversarial/defensive cases (scam price, resale ring, gamed reputation, borrowed key, CAPTCHA wall, rate limit, poisoned catalogue, honeypot link). All watermarked synthetic.",
+  "selftests": ["store.py --selftest", "listings.py --selftest", "vendors.py --selftest", "defenses.py --selftest", "graph.py --selftest", "pipeline.py --selftest"],
+  "reuses": "../crawler/extract.py (content hash), ../dedup/shingle.py + ../dedup/cluster.py (resale-ring grouping)",
+  "consumed_by": "../market-scorer/scorer.py (field recall, record completeness, flag recall, defenses detected, poisoned/honeypot safety)"
+}

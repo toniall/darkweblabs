@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Add Onion Key
+Comment=Register a private key so a keyed OnionShare service opens in Tor Browser
+Exec=/usr/local/bin/add-onion-key
+Icon=/usr/share/darkweb/add-onion-key.png
+Terminal=false
+Categories=Network;Security;

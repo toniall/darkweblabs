@@ -1,0 +1,10 @@
+=== SYNTHETIC LAB DATA — persona profile ===
+persona: n1ghthawk
+surface: forum
+displayed_keys: F19B7A0C4E82D5613FA0
+signed_keys: F19B7A0C4E82D5613FA0
+wallets: bc1qsynth0laba0000000000000000000000zzzz
+active_hours: 23,22,0,1,2,23,0,1,22,23
+tactics: 
+--- posts ---
+We answer questions once; moreover the guides are complete, hence repetition is unnecessary. Whilst newcomers are welcome, they shall read before they ask. Reputation here is earned; it is not bought. We correct errors quickly; moreover we cite sources, hence the record stays clean.

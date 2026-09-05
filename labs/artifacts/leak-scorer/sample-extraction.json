@@ -1,0 +1,246 @@
+{
+  "victims": [
+    {
+      "victim_id": 1001,
+      "org": "Northwind Logistics",
+      "sector": "Manufacturing",
+      "country": "US",
+      "claimed_gb": 200.0,
+      "proof": "12GB sample tree",
+      "status": "countdown",
+      "deadline": "2026-08-12",
+      "_file": "a-t2-1001.html"
+    },
+    {
+      "victim_id": 1002,
+      "org": "Meridian Health",
+      "sector": "Healthcare",
+      "country": "UK",
+      "claimed_gb": 500.0,
+      "proof": "patient index, 3 files",
+      "status": "published",
+      "deadline": "2026-08-03",
+      "_file": "a-t2-1002.html"
+    },
+    {
+      "victim_id": 1003,
+      "org": "Coastal Credit Union",
+      "sector": "Finance",
+      "country": "CA",
+      "claimed_gb": 80.0,
+      "proof": "loan records sample",
+      "status": "withdrawn",
+      "deadline": "\u2014",
+      "_file": "a-t2-1003-drift.html"
+    },
+    {
+      "victim_id": 1003,
+      "org": "Coastal Credit Union",
+      "sector": "Finance",
+      "country": "CA",
+      "claimed_gb": 80.0,
+      "proof": "loan records sample",
+      "status": "withdrawn",
+      "deadline": "\u2014",
+      "_file": "a-t2-1003.html"
+    },
+    {
+      "victim_id": 1004,
+      "org": "Apex Retail Group",
+      "sector": "Retail",
+      "country": "US",
+      "claimed_gb": 1000.0,
+      "proof": "POS logs sample",
+      "status": "sold",
+      "deadline": "\u2014",
+      "_file": "a-t2-1004.html"
+    },
+    {
+      "victim_id": 1005,
+      "org": "GraniteWorks Foundry",
+      "sector": "Manufacturing",
+      "country": "US",
+      "claimed_gb": 50.0,
+      "proof": "CAD archive sample",
+      "status": "countdown",
+      "deadline": "2026-08-20",
+      "_file": "a-t2-1005.html"
+    }
+  ],
+  "lifecycle": {
+    "1001": {
+      "org": "Northwind Logistics",
+      "from_status": "countdown",
+      "to_status": "countdown",
+      "deadline_from": "2026-08-05",
+      "deadline_to": "2026-08-12",
+      "transition": "stable",
+      "deadline_slid": true
+    },
+    "1002": {
+      "org": "Meridian Health",
+      "from_status": "countdown",
+      "to_status": "published",
+      "deadline_from": "2026-08-03",
+      "deadline_to": "2026-08-03",
+      "transition": "published",
+      "deadline_slid": false
+    },
+    "1003": {
+      "org": "Coastal Credit Union",
+      "from_status": "teased",
+      "to_status": "withdrawn",
+      "deadline_from": "\u2014",
+      "deadline_to": "\u2014",
+      "transition": "withdrawn",
+      "deadline_slid": false
+    },
+    "1004": {
+      "org": "Apex Retail Group",
+      "from_status": "sold",
+      "to_status": "sold",
+      "deadline_from": "\u2014",
+      "deadline_to": "\u2014",
+      "transition": "stable",
+      "deadline_slid": false
+    },
+    "1005": {
+      "org": "GraniteWorks Foundry",
+      "from_status": "teased",
+      "to_status": "countdown",
+      "deadline_from": "\u2014",
+      "deadline_to": "2026-08-20",
+      "transition": "escalated",
+      "deadline_slid": false
+    }
+  },
+  "reposts": {
+    "1004": {
+      "org": "Apex Retail Group",
+      "sites": [
+        "BlackVault",
+        "RedLattice"
+      ],
+      "kind": "mirror",
+      "similarity": 0.8,
+      "claim_a": 1000.0,
+      "claim_b": 1000.0
+    },
+    "1005": {
+      "org": "GraniteWorks Foundry",
+      "sites": [
+        "BlackVault",
+        "RedLattice"
+      ],
+      "kind": "clone",
+      "similarity": 0.62,
+      "claim_a": 50.0,
+      "claim_b": 150.0
+    }
+  },
+  "negotiations": {
+    "nego-1001.txt": {
+      "victim": "Northwind Logistics",
+      "brand": "RedLattice",
+      "key": "F19B7A0C4E82D5613FA0",
+      "wallet": "bc1qsynth0laba0000000000000000000000zzzz",
+      "opening_demand": 100,
+      "offers": [
+        100,
+        60,
+        40,
+        40
+      ],
+      "settlement": 40,
+      "proof_gb": 12.0,
+      "tactics": [
+        "deadline_pressure",
+        "deletion_promise",
+        "proof_offered",
+        "threat_leak"
+      ],
+      "outcome": "settled"
+    },
+    "nego-1002.txt": {
+      "victim": "Meridian Health",
+      "brand": "RedLattice",
+      "key": "F19B7A0C4E82D5613FA0",
+      "wallet": "bc1qsynth0laba0000000000000000000000zzzz",
+      "opening_demand": 300,
+      "offers": [
+        300
+      ],
+      "settlement": null,
+      "proof_gb": null,
+      "tactics": [
+        "deadline_pressure",
+        "threat_leak",
+        "threat_notify"
+      ],
+      "outcome": "published"
+    },
+    "nego-1003.txt": {
+      "victim": "Coastal Credit Union",
+      "brand": "RedLattice",
+      "key": "F19B7A0C4E82D5613FA0",
+      "wallet": "bc1qsynth0laba0000000000000000000000zzzz",
+      "opening_demand": 100,
+      "offers": [
+        100,
+        40,
+        40
+      ],
+      "settlement": 40,
+      "proof_gb": null,
+      "tactics": [
+        "deletion_promise",
+        "proof_offered",
+        "threat_leak"
+      ],
+      "outcome": "settled"
+    },
+    "nego-1004.txt": {
+      "victim": "Apex Retail Group",
+      "brand": "RedLattice",
+      "key": "F19B7A0C4E82D5613FA0",
+      "wallet": "bc1qsynth0laba0000000000000000000000zzzz",
+      "opening_demand": 200,
+      "offers": [
+        200
+      ],
+      "settlement": null,
+      "proof_gb": null,
+      "tactics": [
+        "deadline_pressure",
+        "threat_sell"
+      ],
+      "outcome": "ongoing"
+    }
+  },
+  "bluffs": {
+    "1001": {
+      "org": "Northwind Logistics",
+      "bluffs": [
+        "deadline_bluff",
+        "volume_bluff",
+        "deletion_bluff"
+      ]
+    },
+    "1002": {
+      "org": "Meridian Health",
+      "bluffs": []
+    },
+    "1003": {
+      "org": "Coastal Credit Union",
+      "bluffs": [
+        "deletion_bluff"
+      ]
+    },
+    "1004": {
+      "org": "Apex Retail Group",
+      "bluffs": [
+        "sold_bluff"
+      ]
+    }
+  }
+}

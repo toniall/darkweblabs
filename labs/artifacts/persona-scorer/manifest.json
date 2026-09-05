@@ -1,0 +1,13 @@
+{
+  "name": "persona-lab ground truth",
+  "chapter": 13,
+  "summary": "The answer key for the persona-lab corpus: the four true operators and the personas each controls, the confidence each cluster should carry (high when hard identifiers hold it, medium when only soft signals do), and the borrowed-key pairs a correct linker must flag as framing rather than merge.",
+  "operators": [
+    {"name": "Alpha", "personas": ["BlackVault", "NightHawk", "RedLattice", "n1ghthawk"], "confidence": "high"},
+    {"name": "Bravo", "personas": ["IronVault", "SaltMine"], "confidence": "medium"},
+    {"name": "Charlie", "personas": ["Mimic"], "confidence": "single"},
+    {"name": "Delta", "personas": ["Nighthawke"], "confidence": "single"}
+  ],
+  "framing_pairs": [["Mimic", "NightHawk"], ["Mimic", "RedLattice"], ["Mimic", "BlackVault"], ["Mimic", "n1ghthawk"]],
+  "notes": "Alpha is one operator across a market vendor, two leak brands, and a forum handle, tied by a reused signed key + wallet (Ch12 tell) with soft corroboration (voice, rhythm, handle transform, tactic sequence) -> high confidence. Bravo rotated key AND wallet across a market vendor and a leak brand, so only voice + rhythm re-link them -> medium confidence. Charlie (Ch11 borrowed-key vendor Mimic) DISPLAYS Alpha's key but signs its own and writes differently -> its own operator; the shared displayed key must be flagged, not merged. Delta (Nighthawke) is a handle look-alike sharing no key/wallet/voice/rhythm -> its own operator. A naive linker that merges on any shared identifier or a look-alike handle absorbs Charlie and Delta into Alpha and splits Bravo."
+}

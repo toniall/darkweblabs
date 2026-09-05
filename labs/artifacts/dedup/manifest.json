@@ -1,0 +1,23 @@
+{
+  "name": "dedup",
+  "chapter": 10,
+  "summary": "The Chapter 10 mirror/clone detector: turns a corpus of crawled pages into clusters of same-operator mirrors and impersonating clones, graded by the dedup scorer.",
+  "modules": {
+    "shingle.py": "k-shingles + Jaccard for near-duplicate detection, with a hand-rolled MinHash that estimates Jaccard from a fixed-size signature (scale).",
+    "structure.py": "DOM-skeleton SimHash — matches a clone by template even after its text is reworded; cannot alone separate a clone from a different service on the same template.",
+    "signals.py": "Corroborating evidence: shared asset files, key/payment material (reused from the Chapter 9 crawler), and the intent call that separates a mirror (same operator) from a clone (impersonation).",
+    "cluster.py": "Union-find over the pairwise edges (text near-dup OR template+shared-asset) into per-operator clusters; classifies canonical / mirror / clone. --selftest runs the dedup scorer on its own output, naive vs full."
+  },
+  "corpus": "corpus/ — the clone lab: a market with an exact mirror, a near-duplicate (banner) mirror, a payment-swapped clone, a reworded keyless clone, a different service on the same template (the false-merge trap), plus an unrelated forum + its mirror and a paste. All watermarked synthetic.",
+  "selftests": ["shingle.py --selftest", "structure.py --selftest", "signals.py --selftest", "cluster.py --selftest"],
+  "output_format": {
+    "clusters": [
+      {"canonical": "<address>", "members": [
+        {"address": "<address>", "role": "canonical|mirror|clone", "reason": "shared_payment|benign_copy|payment_swap|keyless_copy"}
+      ]}
+    ]
+  },
+  "thresholds": {"shingle_jaccard": 0.5, "structure_simhash": 0.85,
+                 "note": "structure match must be corroborated by a shared asset file to merge, which keeps a different service on the same template out"},
+  "consumed_by": "../dedup-scorer/scorer.py (mirror recall, clone recall/precision, false merges)"
+}

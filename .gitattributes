@@ -1,0 +1,8 @@
+# Shell scripts must keep LF endings — CRLF makes them unrunnable in the
+# container with an error that names the interpreter, not the cause.
+*.sh   text eol=lf
+lab    text eol=lf
+
+# Binary, never touched
+*.png  binary
+*.jpg  binary

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Tor Browser
+Comment=Uses the gateway's tor — no second circuit
+Exec=/usr/local/bin/tor-browser
+Icon=/opt/tor-browser/Browser/browser/chrome/icons/default/default128.png
+Terminal=false
+Categories=Network;WebBrowser;

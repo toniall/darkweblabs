@@ -1,0 +1,34 @@
+{
+  "name": "leak-lab ground truth",
+  "chapter": 12,
+  "summary": "The answer key for the leak-lab corpus: the correct field values for every victim entry (drift variant included), the lifecycle transition and deadline behaviour per victim, the reposted-victim mirror/clone verdicts, the operator tactics per transcript, and the bluffs the public/private cross-check must recover.",
+  "victims": {
+    "a-t2-1001.html": {"victim_id": 1001, "org": "Northwind Logistics", "sector": "Manufacturing", "country": "US", "claimed_gb": 200, "proof": "12GB sample tree", "status": "countdown", "deadline": "2026-08-12"},
+    "a-t2-1002.html": {"victim_id": 1002, "org": "Meridian Health", "sector": "Healthcare", "country": "UK", "claimed_gb": 500, "proof": "patient index, 3 files", "status": "published", "deadline": "2026-08-03"},
+    "a-t2-1003.html": {"victim_id": 1003, "org": "Coastal Credit Union", "sector": "Finance", "country": "CA", "claimed_gb": 80, "proof": "loan records sample", "status": "withdrawn", "deadline": "\u2014"},
+    "a-t2-1003-drift.html": {"victim_id": 1003, "org": "Coastal Credit Union", "sector": "Finance", "country": "CA", "claimed_gb": 80, "proof": "loan records sample", "status": "withdrawn", "deadline": "\u2014"},
+    "a-t2-1004.html": {"victim_id": 1004, "org": "Apex Retail Group", "sector": "Retail", "country": "US", "claimed_gb": 1000, "proof": "POS logs sample", "status": "sold", "deadline": "\u2014"},
+    "a-t2-1005.html": {"victim_id": 1005, "org": "GraniteWorks Foundry", "sector": "Manufacturing", "country": "US", "claimed_gb": 50, "proof": "CAD archive sample", "status": "countdown", "deadline": "2026-08-20"}
+  },
+  "lifecycle": {
+    "1001": {"transition": "stable", "deadline_slid": true},
+    "1002": {"transition": "published", "deadline_slid": false},
+    "1003": {"transition": "withdrawn", "deadline_slid": false},
+    "1004": {"transition": "stable", "deadline_slid": false},
+    "1005": {"transition": "escalated", "deadline_slid": false}
+  },
+  "reposts": {"1004": "mirror", "1005": "clone"},
+  "tactics": {
+    "1001": ["deadline_pressure", "threat_leak", "proof_offered", "deletion_promise"],
+    "1002": ["deadline_pressure", "threat_leak", "threat_notify"],
+    "1003": ["deletion_promise", "proof_offered", "threat_leak"],
+    "1004": ["deadline_pressure", "threat_sell"]
+  },
+  "bluffs": {
+    "1001": ["deadline_bluff", "volume_bluff", "deletion_bluff"],
+    "1002": [],
+    "1003": ["deletion_bluff"],
+    "1004": ["sold_bluff"]
+  },
+  "notes": "a-t2-1003-drift.html is a markup-drift variant of 1003; a class-only parser drops its fields. 1004 is reposted with the same claim (affiliate mirror); 1005 is reposted inflated 50->150GB (recycled clone). 1001's deadline slid (theatre) and its 200GB claim dwarfs the 12GB proof; 1004 is advertised sold while still negotiating; 1001/1003 promise unverifiable deletion. 1002 followed through (published), so it carries no bluff."
+}

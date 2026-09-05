@@ -1,0 +1,22 @@
+{
+  "chat_id": "sample-akira-session",
+  "group": "Akira",
+  "backend": "sample",
+  "note": "Synthetic training session in the Casualtek schema. Contains deliberate bluffs so the analyzer's checks are deterministic. Not a real negotiation.",
+  "messages": [
+    { "party": "Akira",  "content": "> Hello. You've reached an Akira support chat. We have encrypted your network and downloaded 400 GB of your sensitive data. Do you have permission to negotiate on behalf of your organization?", "timestamp": "" },
+    { "party": "Victim", "content": "> Yes. We found our systems encrypted. What do you want?", "timestamp": "" },
+    { "party": "Akira",  "content": "> First, send us 2-3 encrypted files and we will decrypt them as proof that we can restore them. For decryption and secure deletion of your data the price is 900000 USD in BTC.", "timestamp": "" },
+    { "party": "Akira",  "content": "> If you keep silent or waste our time we will publish your data on our blog and sell it to your competitors and the media. This is followed by hundreds of journalists.", "timestamp": "" },
+    { "party": "Victim", "content": "> That is far beyond what we can pay. We are a small company.", "timestamp": "" },
+    { "party": "Akira",  "content": "> You have 3 days to negotiate. After the deadline we will start to upload your files for everyone to see. We have examined your finances and the price is fair.", "timestamp": "" },
+    { "party": "Victim", "content": "> We could raise maybe 200000. Can we split it?", "timestamp": "" },
+    { "party": "Akira",  "content": "> This is our final offer: 600000 USD, non-negotiable. Pay a deposit now and the rest in two weeks and we will delete everything with a proof log.", "timestamp": "" },
+    { "party": "Victim", "content": "> We still cannot reach that number.", "timestamp": "" },
+    { "party": "Akira",  "content": "> Our reputation depends on honesty, we always deliver the decryptor. Because we want to meet you, we can reduce to 450000 USD. This is a special discount.", "timestamp": "" },
+    { "party": "Victim", "content": "> Let me take that to management.", "timestamp": "" },
+    { "party": "Akira",  "content": "> We are still waiting. Send the deposit and we will provide the decryptor and destroy all downloaded data. Everything will remain confidential.", "timestamp": "" },
+    { "party": "Victim", "content": "> Management is reviewing. Give us more time.", "timestamp": "" },
+    { "party": "Akira",  "content": "> We can wait a little longer, but do not test our patience. Provide two files for a test decryption and we will show you the tool works.", "timestamp": "" }
+  ]
+}

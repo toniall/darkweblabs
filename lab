@@ -1,0 +1,2096 @@
+#!/usr/bin/env bash
+# Unlock the Secrets of the DARK WEB, Volume 2 | Antonio Brandao, Author | August 2026
+#
+# lab — companion CLI for Unlock the Secrets of the DARK WEB, Volume 2
+#
+#   ./lab doctor          preflight: platform, Docker, memory, lab coverage
+#   ./lab list            available stacks
+#   ./lab up <stack>      start a lab stack
+#   ./lab logs [service]  service logs plus recent healthcheck output
+#   ./lab down [stack]    stop+remove containers (i2p|hyphanet|range|overlays|base|all; --volumes drops vols)
+#   ./lab stop [stack]    stop containers but keep them (./lab up resumes; ./lab down removes)
+#   ./lab reset <stack>   discard scratch state, keep evidence
+#   ./lab check <id>      grade a lab against its expected result
+#   ./lab range <cmd>     simulated darknet range: list|truth|score|flap|fetch|compare
+#   ./lab crawl <cmd>     run the Chapter 9 crawler (selftest|range|score [--naive])
+#   ./lab dedup <cmd>     run the Chapter 10 mirror/clone detector (selftest|run|score [--naive])
+#   ./lab market <cmd>    run the Chapter 11 market extractor (selftest|store|extract|defenses|graph|score)
+#   ./lab leak <cmd>      run the Chapter 12 leak/negotiation extractor (selftest|store|extract|lifecycle|reposts|negotiate|correlate|score)
+#   ./lab link <cmd>      run the Chapter 13 persona-linkage engine (selftest|ledger|hard|style|behavior|fuse|score)
+#   ./lab detect <cmd>    run the Chapter 14 detection engine (selftest|watchlist|feed|classify|score|correlate|monitor|grade)
+#   ./lab capstone <cmd>  run the Chapter 15 capstone report (selftest|evidence|claims|report|grade)
+#   ./lab report [all]    build the visual intelligence suite into intel/, mounted read-only in the workstation
+#   ./lab open            print the desktop URL
+#   ./lab creds           print generated desktop credentials
+#
+set -uo pipefail
+
+# Recursion guard. A stray self-invocation anywhere in this script would
+# otherwise spawn shells until bash complains about SHLVL, with no clue as to
+# where it started.
+LAB_DEPTH="$(( ${LAB_DEPTH:-0} + 1 ))"
+export LAB_DEPTH
+if [ "$LAB_DEPTH" -gt 3 ]; then
+  printf 'lab: refusing to run %s levels deep — this is a bug in the script.\n' \
+    "$LAB_DEPTH" >&2
+  printf 'lab: report it, and run the docker compose commands directly meanwhile.\n' >&2
+  exit 1
+fi
+
+# Bump when any file in the repo changes. `lab doctor` compares this against
+# what each file expects, so a half-copied repo says so instead of behaving
+# strangely.
+LAB_VERSION="5.1.3"
+
+LAB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EVIDENCE_DIR="${LAB_EVIDENCE:-$HOME/evidence}"
+COMPOSE_FILE="$LAB_ROOT/compose.yml"
+
+# ── output ────────────────────────────────────────────────────────────────────
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  C_DIM=$'\033[2m'; C_OK=$'\033[32m'; C_WARN=$'\033[33m'
+  C_BAD=$'\033[31m'; C_HEAD=$'\033[1;35m'; C_OFF=$'\033[0m'
+else
+  C_DIM=''; C_OK=''; C_WARN=''; C_BAD=''; C_HEAD=''; C_OFF=''
+fi
+
+say()   { printf '  %-16s %s\n' "$1" "$2"; }
+ok()    { printf '  %-16s %s%s%s\n' "$1" "$C_OK" "$2" "$C_OFF"; }
+warn()  { printf '  %-16s %s%s%s\n' "$1" "$C_WARN" "$2" "$C_OFF"; }
+bad()   { printf '  %-16s %s%s%s\n' "$1" "$C_BAD" "$2" "$C_OFF"; }
+head_() { printf '\n%s%s%s\n\n' "$C_HEAD" "$1" "$C_OFF"; }
+die()   { printf '%serror:%s %s\n' "$C_BAD" "$C_OFF" "$1" >&2; exit 1; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# ── doctor ────────────────────────────────────────────────────────────────────
+
+cmd_doctor() {
+  head_ "DARKWEB LAB — preflight"
+
+  say "lab version" "$LAB_VERSION"
+
+  local warnings=0 blockers=0
+
+  # --- platform -------------------------------------------------------------
+  local os arch kernel host_kind="native linux"
+  os="$(uname -s)"; arch="$(uname -m)"; kernel="$(uname -r)"
+
+  case "$os" in
+    Linux)
+      if grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then
+        host_kind="WSL2 (${WSL_DISTRO_NAME:-unknown distro})"
+      fi
+      ;;
+    Darwin) host_kind="macOS" ;;
+    *)      host_kind="$os" ;;
+  esac
+
+  say  "platform" "$host_kind / $arch"
+  say  "kernel"   "$kernel"
+
+  case "$arch" in
+    x86_64|amd64)  ok   "architecture" "amd64 — all images native" ;;
+    aarch64|arm64) warn "architecture" "arm64 — Tor Browser from the alpha channel"
+                   printf '                   Only the 16.0 alpha series ships linux-aarch64.\n'
+                   printf '                   Override with LAB_TB_VERSION_ARM if that changes.\n'
+                   warnings=$((warnings+1)) ;;
+    *)             warn "architecture" "$arch — untested"
+                   warnings=$((warnings+1)) ;;
+  esac
+
+  # --- docker ---------------------------------------------------------------
+  local dver="" cver="" rootless="no"
+  if have docker; then
+    dver="$(docker version --format '{{.Server.Version}}' 2>/dev/null)"
+    if [ -z "$dver" ]; then
+      bad "docker" "installed, but the daemon isn't reachable"
+      blockers=$((blockers+1))
+    else
+      docker info -f '{{join .SecurityOptions ","}}' 2>/dev/null \
+        | grep -q rootless && rootless="yes"
+      local major="${dver%%.*}"
+      if [ "${major:-0}" -ge 24 ] 2>/dev/null; then
+        ok "docker" "$dver  (rootless: $rootless)"
+      else
+        warn "docker" "$dver — 24 or newer recommended"
+        warnings=$((warnings+1))
+      fi
+    fi
+  else
+    bad "docker" "not installed — see Lab 1.0 Step 6"
+    blockers=$((blockers+1))
+  fi
+
+  if docker compose version >/dev/null 2>&1; then
+    cver="$(docker compose version --short 2>/dev/null)"
+    ok "compose" "v$cver"
+  elif have docker-compose; then
+    bad "compose" "v1 detected — this book needs Compose v2"
+    blockers=$((blockers+1))
+  else
+    bad "compose" "not found"
+    blockers=$((blockers+1))
+  fi
+
+  # --- memory ---------------------------------------------------------------
+  local mem_gb=0
+  if [ -r /proc/meminfo ]; then
+    mem_gb=$(( $(awk '/MemTotal/{print $2}' /proc/meminfo) / 1024 / 1024 ))
+  elif have sysctl; then
+    mem_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 / 1024 / 1024 ))
+  fi
+
+  if   [ "$mem_gb" -ge 16 ]; then ok   "memory" "${mem_gb} GB — every lab"
+  elif [ "$mem_gb" -ge 8  ]; then warn "memory" "${mem_gb} GB — LLM labs need 16 GB"
+                                  warnings=$((warnings+1))
+  elif [ "$mem_gb" -ge 4  ]; then warn "memory" "${mem_gb} GB — Parts I–II only"
+                                  warnings=$((warnings+1))
+  else                            bad  "memory" "${mem_gb} GB — below the 4 GB floor"
+                                  blockers=$((blockers+1))
+  fi
+
+  # --- disk -----------------------------------------------------------------
+  local disk_gb
+  disk_gb="$(df -BG --output=avail . 2>/dev/null | tail -1 | tr -dc '0-9')"
+  disk_gb="${disk_gb:-0}"
+  if   [ "$disk_gb" -ge 50 ]; then ok   "disk free" "${disk_gb} GB"
+  elif [ "$disk_gb" -ge 20 ]; then warn "disk free" "${disk_gb} GB — 50 GB recommended"
+                                   warnings=$((warnings+1))
+  else                             bad  "disk free" "${disk_gb} GB — not enough"
+                                   blockers=$((blockers+1))
+  fi
+
+  # --- kernel features ------------------------------------------------------
+  local cgroup="unknown"
+  if have stat; then
+    case "$(stat -fc %T /sys/fs/cgroup 2>/dev/null)" in
+      cgroup2fs) cgroup="v2" ;;
+      tmpfs)     cgroup="v1" ;;
+    esac
+  fi
+  [ "$cgroup" = "v2" ] && ok "cgroup" "v2" || say "cgroup" "$cgroup"
+
+  [ -e /dev/kvm ] && ok "kvm" "available" || say "kvm" "not present (not required)"
+
+  if have nvidia-smi; then ok "gpu" "nvidia — local LLM can accelerate"
+  else                     say "gpu" "none — local LLM runs on CPU"; fi
+
+  # --- repository location --------------------------------------------------
+  local here; here="$(pwd -P)"
+  case "$here" in
+    /mnt/[a-z]/*)
+      bad "repo location" "$here"
+      printf '                   %sWindows drive over 9P — builds will crawl.%s\n' \
+             "$C_BAD" "$C_OFF"
+      printf '                   Move it under your Linux home. See Chapter 1 Step 7.\n'
+      blockers=$((blockers+1)) ;;
+    *) ok "repo location" "$here" ;;
+  esac
+
+  # --- registry reachability ------------------------------------------------
+  # A tiny image can succeed while larger blob fetches fail, so check which
+  # address family the resolver hands out rather than trusting one pull.
+  # What matters is whether an IPv6 socket can be opened at all. If it can,
+  # Docker's Go runtime will try AAAA addresses even when nothing is routable.
+  local v6_addrs=0
+  if have ip; then
+    v6_addrs="$(ip -6 addr show scope global 2>/dev/null | grep -c 'inet6')" || v6_addrs=0
+  fi
+  v6_addrs="${v6_addrs//[!0-9]/}"; v6_addrs="${v6_addrs:-0}"
+  if [ ! -e /proc/net/if_inet6 ]; then
+    ok "ipv6 stack" "absent — Docker will use IPv4 only"
+  elif [ "$v6_addrs" -eq 0 ]; then
+    warn "ipv6 stack" "loaded but unrouted — pulls may fail partway"
+    printf '                   Docker can open IPv6 sockets, so it will try them.\n'
+    printf '                   Fix with: ./lab fix-ipv6\n'
+    warnings=$((warnings+1))
+  else
+    ok "ipv6 stack" "$v6_addrs global address(es)"
+  fi
+
+  # Docker Hub is only needed to fetch the base images the lab images are built
+  # FROM. Once those are on disk, the lab runs offline — so an unreachable
+  # registry is a blocker only if the bases are missing too.
+  if have docker && [ -n "$dver" ]; then
+    local bases="debian:bookworm-slim nginx:1.27-alpine kasmweb/core-ubuntu-noble:1.16.0"
+    local missing=""
+    for b in $bases; do
+      docker image inspect "$b" >/dev/null 2>&1 || missing="$missing $b"
+    done
+
+    if [ -z "$missing" ]; then
+      ok "base images" "all present — the registry is not needed"
+    elif timeout 40 docker pull -q alpine:3.20 >/dev/null 2>&1; then
+      ok "registry" "reachable — missing bases will be fetched"
+    else
+      bad "registry" "unreachable, and base images are missing"
+      for b in $missing; do
+        printf '                   missing: %s\n' "$b"
+      done
+      printf '                   Every Dockerfile starts FROM one of these.\n'
+      printf '                   Try: ./lab pin-registry     (forces IPv4 for Docker)\n'
+      printf '                   Or import offline: ./lab load-images\n'
+      blockers=$((blockers+1))
+    fi
+  fi
+
+  # --- lab coverage ---------------------------------------------------------
+  head_ "Lab coverage"
+
+  local netfilter="yes"
+  if [ "$os" = "Darwin" ]; then netfilter="no"
+  elif docker info 2>/dev/null | grep -qi 'Operating System: Docker Desktop'; then
+    netfilter="no"
+  fi
+
+  if [ "$netfilter" = "yes" ]; then
+    ok "Lab 2.4" "native netfilter — runs as written"
+  else
+    warn "Lab 2.4" "Docker Desktop — host firewall lab is degraded"
+    printf '                   Run it on Linux or the VPS to see the real behaviour.\n'
+    warnings=$((warnings+1))
+  fi
+
+  [ "$mem_gb" -ge 16 ] \
+    && ok   "Ch. 12 LLM" "16 GB+ — grounded simulation available" \
+    || warn "Ch. 12 LLM" "replay mode only below 16 GB"
+
+  [ "$mem_gb" -ge 8 ] \
+    && ok   "Parts III-IV" "8 GB+ — collection stacks will run" \
+    || warn "Parts III-IV" "use a VPS for continuous collection"
+
+  # --- report ---------------------------------------------------------------
+  mkdir -p "$EVIDENCE_DIR"
+  cat > "$EVIDENCE_DIR/preflight.json" <<JSON
+{
+  "generated":    "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "platform":     "$host_kind",
+  "architecture": "$arch",
+  "kernel":       "$kernel",
+  "docker":       "${dver:-null}",
+  "compose":      "${cver:-null}",
+  "rootless":     "$rootless",
+  "memory_gb":    $mem_gb,
+  "disk_free_gb": $disk_gb,
+  "cgroup":       "$cgroup",
+  "repo_path":    "$here",
+  "netfilter":    "$netfilter",
+  "warnings":     $warnings,
+  "blockers":     $blockers
+}
+JSON
+
+  head_ "Result"
+  if   [ "$blockers" -gt 0 ]; then
+    bad  "status" "$blockers blocker(s), $warnings warning(s) — fix before Lab 1.1"
+  elif [ "$warnings" -gt 0 ]; then
+    warn "status" "ready, with $warnings warning(s)"
+  else
+    ok   "status" "ready"
+  fi
+  printf '  %-16s %s\n\n' "report" "$EVIDENCE_DIR/preflight.json"
+
+  [ "$blockers" -gt 0 ] && return 1 || return 0
+}
+
+# ── compose wrappers ──────────────────────────────────────────────────────────
+
+ensure_creds() {
+  local envf="$LAB_ROOT/.env"
+
+  # The username is a setting, not a secret — keep it in .env so compose and
+  # `lab creds` cannot disagree about it.
+  grep -q '^LAB_VNC_USER=' "$envf" 2>/dev/null \
+    || printf 'LAB_VNC_USER=%s\n' "${LAB_VNC_USER:-darkweb}" >> "$envf"
+
+  # Tor control-port password, shared with the workstation so Tor Browser and
+  # OnionShare drive the gateway's tor instead of starting a second one. Checked
+  # independently of the desktop password below, so an existing .env from an
+  # earlier version picks it up on the next `up`. Alphanumeric only — it is
+  # hashed into the gateway's torrc and quoted into the browser's auth, and
+  # keeping it free of shell/JSON metacharacters removes an escaping hazard.
+  if ! grep -q '^LAB_CONTROL_PW=' "$envf" 2>/dev/null; then
+    local cpw
+    if have openssl; then cpw="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)"
+    else cpw="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-24)"; fi
+    printf 'LAB_CONTROL_PW=%s\n' "$cpw" >> "$envf"
+    chmod 600 "$envf"
+  fi
+
+  grep -q '^LAB_VNC_PW=' "$envf" 2>/dev/null && { chmod 600 "$envf"; return 0; }
+
+  local pw
+  if have openssl; then pw="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)"
+  else pw="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-20)"; fi
+
+  printf 'LAB_VNC_PW=%s\n' "$pw" >> "$envf"
+  chmod 600 "$envf"
+  printf '  %-16s %s\n' "credentials" "generated — ./lab creds"
+}
+
+check_contexts() {
+  local missing=""
+  for f in images/gateway/Dockerfile images/gateway/torrc \
+           images/gateway/entrypoint.sh images/gateway/rules.sh \
+           images/workstation/Dockerfile images/workstation/entrypoint.sh \
+           images/workstation/netsetup.sh images/workstation/xstartup \
+           images/workstation/novnc/darkweb-clipboard.js \
+           images/workstation/tor-browser-launch.sh \
+           images/workstation/onionshare-fix.py \
+           images/workstation/add-onion-key.sh \
+           images/workstation/rebrand.py; do
+    [ -f "$LAB_ROOT/$f" ] || missing="$missing $f"
+  done
+  ls "$LAB_ROOT"/images/workstation/desktop/*.desktop >/dev/null 2>&1 \
+    || missing="$missing images/workstation/desktop/*.desktop"
+  [ -z "$missing" ] && return 0
+
+  printf '%serror:%s missing build files\n\n' "$C_BAD" "$C_OFF" >&2
+  for f in $missing; do printf '  %s\n' "$f" >&2; done
+  cat >&2 <<'HINT'
+
+Expected layout:
+
+  darkweblabs/
+  ├── lab
+  ├── compose.yml
+  ├── images/
+  │   ├── gateway/      Dockerfile, torrc, entrypoint.sh, rules.sh
+  │   └── workstation/  Dockerfile, entrypoint.sh, netsetup.sh, xstartup, desktop/
+  ├── labs/checks/
+  └── site/
+
+HINT
+  exit 1
+}
+
+check_site() {
+  # The companion site is proprietary and ships with the book as its own
+  # package, not in this repository. compose bind-mounts ./site into the portal,
+  # so an absent or empty directory is not merely empty: nginx has no index to
+  # serve, answers 403, fails its healthcheck, and Lab 1.1's portal assertion
+  # fails on a stack that is otherwise perfectly healthy.
+  #
+  # Writing a placeholder here rather than committing one keeps site/ out of the
+  # repository (it is gitignored in full) while still giving a fresh clone a
+  # portal that returns 200. Unpacking the real site overwrites it.
+  if [ ! -d "$LAB_ROOT/site" ] || [ -z "$(ls -A "$LAB_ROOT/site" 2>/dev/null)" ]; then
+    mkdir -p "$LAB_ROOT/site" 2>/dev/null || return 0
+    cat > "$LAB_ROOT/site/index.html" <<'PLACEHOLDER' 2>/dev/null || return 0
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab portal &middot; Unlock the Secrets of the DARK WEB, Vol. 2</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center;
+         background:#141024; color:#e8e6f0;
+         font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .card { max-width:34rem; padding:2.5rem; border:1px solid #2b2545; border-radius:14px;
+          background:#191430; }
+  h1 { margin:0 0 .25rem; font-size:1.3rem; }
+  .eyebrow { font:600 .72rem/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+             letter-spacing:.14em; text-transform:uppercase; color:#b866ff; margin-bottom:.9rem; }
+  p { color:#b9b4cc; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#46d6d0;
+         background:#0f0c1c; padding:.15rem .4rem; border-radius:5px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="eyebrow">Lab portal</div>
+    <h1>The portal is running. The companion site is not installed.</h1>
+    <p>This placeholder is generated by <code>./lab up</code> so the portal starts healthy on a
+    fresh clone. The companion site is proprietary and comes with the book, not from GitHub.</p>
+    <p>If you have it, unpack it over this directory and reload:</p>
+    <p><code>unzip darkweb-public-site.zip -d site/</code></p>
+    <p>Everything else in the lab works without it. The labs are driven from <code>./lab</code>,
+    and the desktop is at <code>http://127.0.0.1:6901</code>.</p>
+  </div>
+</body>
+</html>
+PLACEHOLDER
+    printf '  note  site/ was empty, so the portal is serving a placeholder.\n'
+    printf '        Unpack the site package that came with the book into %s/site\n' "$LAB_ROOT"
+    printf '        Everything else in the lab runs without it.\n\n'
+  fi
+}
+
+need_compose() {
+  [ -f "$COMPOSE_FILE" ] || die "no compose.yml in $LAB_ROOT"
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 not available"
+  check_contexts
+  ensure_creds
+  load_env
+}
+
+# Compose reads .env inconsistently depending on version and working directory,
+# so export the values into our own environment instead. Environment variables
+# always win over .env, and this works from any directory.
+load_env() {
+  local envf="$LAB_ROOT/.env"
+  [ -f "$envf" ] || return 0
+  set -a
+  # shellcheck disable=SC1090
+  . "$envf"
+  set +a
+}
+
+dc() {
+  docker compose --env-file "$LAB_ROOT/.env" -f "$COMPOSE_FILE" "$@"
+}
+
+
+# Docker Hub publishes AAAA records. WSL2 usually has no working IPv6 route, so
+# pulls fail partway with:
+#   dial tcp [2600:...]:443: connect: network is unreachable
+#
+# Two fixes that look right and are not:
+#
+#   "ipv6": false in daemon.json — governs container networking, not the
+#   daemon's own outbound connections.
+#
+#   /etc/gai.conf precedence — glibc only. dockerd is Go, and Go has its own
+#   resolver that reads /etc/resolv.conf and ignores gai.conf entirely.
+#
+# What works: make IPv6 absent rather than merely unconfigured. sysctl
+# disable_ipv6 removes addresses but leaves the stack, so socket(AF_INET6) still
+# succeeds, Go concludes IPv6 works, and dials an unreachable address. Disabling
+# it in the kernel makes that socket call fail, and Go then filters AAAA records
+# out before dialing.
+cmd_fix_ipv6() {
+  head_ "Making IPv6 absent so Docker stops dialing it"
+
+  local is_wsl=no
+  grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null && is_wsl=yes
+
+  if [ "$is_wsl" = yes ]; then
+    cat <<'WSLFIX'
+  This is WSL2, so the fix goes in Windows, not here.
+
+  1. In PowerShell:
+
+       notepad "$env:USERPROFILE\.wslconfig"
+
+  2. Add this to the [wsl2] section (create it if absent):
+
+       [wsl2]
+       kernelCommandLine = ipv6.disable=1
+
+  3. Then, in PowerShell:
+
+       wsl --shutdown
+
+     Wait ten seconds and reopen Ubuntu.
+
+  4. Confirm IPv6 is gone:
+
+       ip -6 addr          # should print nothing
+       ./lab doctor
+
+  Why this and not sysctl: sysctl removes IPv6 addresses but leaves the
+  stack loaded, so Docker still opens an IPv6 socket, tries the address and
+  fails. The kernel flag removes the stack, and Docker then skips IPv6
+  addresses entirely.
+
+WSLFIX
+    return 0
+  fi
+
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "  This needs sudo. Re-running..."
+    exec sudo "$0" fix-ipv6
+  fi
+
+  # Native Linux: a kernel module blacklist has the same effect.
+  echo "options ipv6 disable=1" > /etc/modprobe.d/darkweb-noipv6.conf
+  echo "  modprobe.d       IPv6 module disabled (takes effect after reboot)"
+
+  mkdir -p /etc/docker
+  [ -f /etc/docker/daemon.json ] && \
+    cp /etc/docker/daemon.json "/etc/docker/daemon.json.bak.$(date +%s)"
+  printf '{\n  "ipv6": false,\n  "dns": ["1.1.1.1", "8.8.8.8"]\n}\n' > /etc/docker/daemon.json
+  echo "  daemon.json      written"
+
+  if have systemctl && systemctl is-active --quiet docker; then
+    systemctl restart docker && echo "  docker           restarted"
+  fi
+  echo
+  echo "  Reboot, then: ./lab doctor"
+}
+
+
+# Import base images from a tar bundle, for machines that cannot reach a
+# registry at all. Create the bundle on a machine that can:
+#
+#   docker pull debian:bookworm-slim nginx:1.27-alpine \
+#              kasmweb/core-ubuntu-noble:1.16.0
+#   docker save debian:bookworm-slim nginx:1.27-alpine \
+#              kasmweb/core-ubuntu-noble:1.16.0 -o darkweb-bases.tar
+cmd_load_images() {
+  local tar="${1:-$LAB_ROOT/darkweb-bases.tar}"
+  [ -f "$tar" ] || die "no bundle at $tar — see ./lab help for how to build one"
+  head_ "Importing base images"
+  docker load -i "$tar"
+  echo
+  echo "  Now run: ./lab doctor"
+}
+
+
+# Docker's daemon is Go, and Go's resolver ignores /etc/gai.conf and does its
+# own address selection. On WSL2 that can mean dockerd tries IPv6 addresses no
+# other program on the machine is offered — curl works, docker doesn't.
+#
+# Go checks /etc/hosts before DNS, and when it finds a name there it uses ONLY
+# those addresses. Pinning the registry hostnames to their IPv4 addresses
+# therefore forces IPv4 for Docker specifically.
+#
+# This is a workaround, not a cure. Remove the block with ./lab unpin-registry
+# once the base images are on disk.
+cmd_pin_registry() {
+  local hosts=/etc/hosts
+  local marker_a="# >>> darkweb lab: force IPv4 for Docker registry"
+  local marker_b="# <<< darkweb lab"
+  local names="registry-1.docker.io auth.docker.io index.docker.io production.cloudfront.docker.com"
+
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "  This needs sudo. Re-running..."
+    exec sudo "$0" pin-registry
+  fi
+
+  head_ "Pinning Docker registry hostnames to IPv4"
+
+  local block="$marker_a\n"
+  local n=0
+  for name in $names; do
+    local ips
+    ips="$(getent ahostsv4 "$name" 2>/dev/null | awk '{print $1}' | sort -u)"
+    if [ -z "$ips" ]; then
+      warn "$name" "no IPv4 address found"
+      continue
+    fi
+    local ip
+    ip="$(echo "$ips" | head -1)"
+    block="$block$ip\t$name\n"
+    ok "$name" "$ip"
+    n=$((n+1))
+  done
+  block="$block$marker_b"
+
+  [ "$n" -eq 0 ] && die "could not resolve any registry hostname — check DNS"
+
+  cp "$hosts" "$hosts.bak.$(date +%s)"
+  sed -i "/^$marker_a\$/,/^$marker_b\$/d" "$hosts"
+  printf "%b\n" "$block" >> "$hosts"
+
+  echo
+  printf '  %-16s %s\n' "written" "$hosts ($n entries)"
+  echo
+  echo "  Now run: ./lab up base"
+  echo "  Afterwards, undo with: ./lab unpin-registry"
+}
+
+cmd_unpin_registry() {
+  if [ "$(id -u)" -ne 0 ]; then exec sudo "$0" unpin-registry; fi
+  sed -i '/^# >>> darkweb lab: force IPv4 for Docker registry$/,/^# <<< darkweb lab$/d' /etc/hosts
+  echo "  removed the pinned registry entries from /etc/hosts"
+}
+
+# When a container is unhealthy, the useful information is in two places that
+# are awkward to reach: the service log, and the last healthcheck output.
+cmd_logs() {
+  local svc="${1:-}"
+  need_compose
+  if [ -z "$svc" ]; then
+    dc logs --tail=60
+    return 0
+  fi
+
+  # Accept either the service name (gateway) or the container name
+  # (darkweb-gateway).
+  #
+  # `docker compose config --services` lists nothing when every service carries
+  # a `profiles:` key and no profile is active — which is the case here, and is
+  # why this lookup previously reported "no such service" for every name and
+  # then printed an empty list of alternatives. Ask with the wildcard profile.
+  local services
+  services="$(dc --profile '*' config --services 2>/dev/null)"
+  [ -n "$services" ] || services="$(dc --profile base config --services 2>/dev/null)"
+
+  if ! printf '%s\n' "$services" | grep -qx "$svc"; then
+    local guess="${svc#darkweb-}"
+    if printf '%s\n' "$services" | grep -qx "$guess"; then
+      svc="$guess"
+    else
+      printf 'no such service: %s\n\n' "$svc" >&2
+      if [ -n "$services" ]; then
+        printf 'available:\n' >&2
+        printf '%s\n' "$services" | sed 's/^/  /' >&2
+      else
+        printf 'could not list services — falling back to docker logs:\n' >&2
+        printf '  docker logs darkweb-%s\n' "$svc" >&2
+      fi
+      return 1
+    fi
+  fi
+
+  head_ "Logs: $svc"
+  dc --profile '*' logs --tail=80 "$svc" 2>/dev/null \
+    || docker logs --tail=80 "darkweb-$svc" 2>&1
+
+  local cid
+  cid="$(dc ps -q "$svc" 2>/dev/null | head -1)"
+  [ -z "$cid" ] && return 0
+
+  local state
+  state="$(docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo none)"
+  [ "$state" = "none" ] && return 0
+
+  head_ "Health: $state"
+  docker inspect -f '{{range .State.Health.Log}}{{.End}}  exit={{.ExitCode}}
+{{.Output}}{{end}}' "$cid" 2>/dev/null | tail -20
+}
+
+# Files get copied one at a time and then disagree with each other. This checks
+# the repo is internally consistent before anything is built or run.
+cmd_selftest() {
+  head_ "Repo self-test  (lab $LAB_VERSION)"
+  local fail=0
+
+  chk() {
+    if [ "$2" = ok ]; then ok "$1" "$3"; else bad "$1" "$3"; fail=$((fail+1)); fi
+  }
+
+  # --- files present -------------------------------------------------------
+  for f in compose.yml \
+           images/gateway/Dockerfile images/gateway/torrc \
+           images/gateway/entrypoint.sh images/gateway/rules.sh \
+           images/workstation/Dockerfile images/workstation/entrypoint.sh \
+           images/workstation/netsetup.sh images/workstation/xstartup \
+           images/workstation/novnc/darkweb-clipboard.js \
+           images/workstation/tor-browser-launch.sh \
+           images/workstation/onionshare-fix.py \
+           images/workstation/add-onion-key.sh \
+           images/workstation/rebrand.py; do
+    if [ -f "$LAB_ROOT/$f" ]; then chk "$(basename "$f")" ok "present"
+    else chk "$f" no "MISSING"; fi
+  done
+
+  # --- content markers, one per fix that has bitten us ---------------------
+  local wsd="$LAB_ROOT/images/workstation/Dockerfile"
+
+  grep -q 'apk add --no-cache tor' "$LAB_ROOT/images/gateway/Dockerfile" 2>/dev/null \
+    && chk "gateway tor" ok "gateway builds and runs tor itself" \
+    || chk "gateway tor" no "stale - the gateway should install tor"
+
+  grep -q 'tcpdump' "$LAB_ROOT/images/gateway/Dockerfile" 2>/dev/null \
+    && chk "gateway tcpdump" ok "gateway can capture its own uplink (Ch2 labs + check 5.1)" \
+    || chk "gateway tcpdump" no "stale - the Ch2 tcpdump labs and check 5.1 will fail"
+
+  grep -q 'chpasswd' "$wsd" 2>/dev/null \
+    && chk "workstation sudo pw" ok "analyst account has a sudo password (Ch2 nmap/proxychains installs)" \
+    || chk "workstation sudo pw" no "stale - sudo will prompt for a password that was never set"
+
+  grep -q 'SessionStore' "$LAB_ROOT/images/ransomchat/app.py" 2>/dev/null \
+    && chk "ransomchat session" ok "the chat pins group, anchor and deadline server-side (Lab 12.8)" \
+    || chk "ransomchat session" no "stale - the operator will re-anchor and re-greet mid-negotiation"
+
+  # booktest tests the MANUSCRIPT, which does not ship in the public repository.
+  # Its absence is the expected state there, not a fault.
+  [ -f "$LAB_ROOT/labs/booktest.py" ] \
+    && chk "booktest" ok "the manuscript test suite is present (./lab booktest, also runs in ci)" \
+    || chk "booktest" ok "not in this edition — it carries the labs, not the manuscript"
+
+  grep -q 'build: ./images/gateway' "$LAB_ROOT/compose.yml" 2>/dev/null \
+    && chk "gateway image" ok "our own dual-homed gateway, not a stock one" \
+    || chk "gateway image" no "stale - expected a built gateway image"
+
+  grep -q 'TransPort' "$LAB_ROOT/images/gateway/torrc" 2>/dev/null \
+    && chk "torrc" ok "transparent proxy + DNS ports declared" \
+    || chk "torrc" no "stale - transparent proxying will not work"
+
+  grep -qE '^[[:space:]]*HiddenServiceDir' "$LAB_ROOT/images/gateway/torrc" 2>/dev/null \
+    && chk "torrc services" no "a HiddenServiceDir with no port stops tor starting" \
+    || chk "torrc services" ok "no orphaned HiddenServiceDir"
+
+  # The redirect now happens in PREROUTING, on traffic arriving FROM the
+  # workstation, not in OUTPUT. tor's own traffic is never touched, so there is
+  # no uid to guess and exempt - the whole simplification of the routed design.
+  grep -q 'nat -A PREROUTING' "$LAB_ROOT/images/gateway/rules.sh" 2>/dev/null \
+    && chk "redirect model" ok "workstation traffic redirected in PREROUTING" \
+    || chk "redirect model" no "stale - expected the routed PREROUTING rules"
+
+  grep -q 'dport 53' "$LAB_ROOT/images/gateway/rules.sh" 2>/dev/null \
+    && chk "dns capture" ok "DNS redirected into tor's resolver" \
+    || chk "dns capture" no "stale - DNS will bypass tor or fail"
+
+  # Tor Browser and proxychains reach the gateway's SOCKS port explicitly. TCP
+  # to the gateway must RETURN before the blanket redirect, or SOCKS is bounced
+  # to the TransPort and appears dead while transparent proxying still works.
+  grep -q 'p tcp -j RETURN' "$LAB_ROOT/images/gateway/rules.sh" 2>/dev/null \
+    && chk "socks reachable" ok "gateway-bound TCP reaches SOCKS, not TransPort" \
+    || chk "socks reachable" no "stale - SOCKS traffic would hit the TransPort"
+
+  grep -q 'iptables -t nat -F PREROUTING' "$LAB_ROOT/images/gateway/rules.sh" 2>/dev/null \
+    && chk "rules idempotent" ok "cleared before install" \
+    || chk "rules idempotent" no "stale - reruns stack duplicate rules"
+
+  # Anything the gateway cannot carry over Tor must be rejected, not forwarded.
+  # A ping to the internet timing out here is the design working.
+  grep -qE 'FORWARD -j REJECT' "$LAB_ROOT/images/gateway/rules.sh" 2>/dev/null \
+    && chk "fail closed" ok "unroutable traffic rejected in FORWARD" \
+    || chk "fail closed" no "stale - traffic could leak past the gateway"
+
+  grep -q 'ip_forward' "$LAB_ROOT/compose.yml" 2>/dev/null \
+    && chk "forwarding" ok "enabled, so the reject is explicit not a silent drop" \
+    || chk "forwarding" no "stale - the gateway cannot route the workstation"
+
+  # The desktop-access bridge must carry inbound noVNC only; a connection the
+  # workstation opens there would be a path to the internet around Tor.
+  grep -qE 'OUTPUT -o .* -j REJECT' "$LAB_ROOT/images/workstation/netsetup.sh" 2>/dev/null \
+    && chk "egress lock" ok "desktop-access interface is inbound only" \
+    || chk "egress lock" no "stale - the workstation could leak past the gateway"
+
+  grep -q 'service_healthy' "$LAB_ROOT/compose.yml" 2>/dev/null \
+    && chk "start ordering" ok "workstation waits for a healthy gateway" \
+    || chk "start ordering" no "stale - workstation may start before tor is ready"
+
+  # 4.6: the workstation's apps drive the gateway's tor over its control port,
+  # rather than each launching a second tor.
+  grep -q 'ControlPort __GATEWAY_IP__:9051' "$LAB_ROOT/images/gateway/torrc" 2>/dev/null \
+    && chk "control port" ok "on the internal interface, reachable by the workstation" \
+    || chk "control port" no "stale - the workstation cannot reach the control port"
+
+  grep -q 'tor --hash-password' "$LAB_ROOT/images/gateway/entrypoint.sh" 2>/dev/null \
+    && chk "control auth" ok "password hashed into torrc at start" \
+    || chk "control auth" no "stale - the control port would not authenticate"
+
+  grep -q '"connection_type": "control_port"' "$LAB_ROOT/images/workstation/entrypoint.sh" 2>/dev/null \
+    && chk "onionshare tor" ok "uses the gateway's tor, not a bundled one" \
+    || chk "onionshare tor" no "stale - OnionShare would start Tor-over-Tor"
+
+  # 4.7: OnionShare can host through the gateway. It binds 0.0.0.0 (the Whonix
+  # marker) and its onion target is repointed at the workstation (the fix), so
+  # the gateway's tor can reach the server instead of its own empty loopback.
+  grep -q 'anon-ws-base-files/workstation' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "onionshare bind" ok "server binds on the workstation's interface" \
+    || chk "onionshare bind" no "stale - OnionShare would bind loopback only"
+
+  grep -q 'onionshare-fix' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "onionshare host" ok "onion target repointed to the workstation" \
+    || chk "onionshare host" no "stale - a hosted onion would be unreachable"
+
+  # The web root should open the desktop, not a directory listing.
+  grep -q 'novnc/index.html' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "web root" ok "redirects to the desktop client" \
+    || chk "web root" no "stale - the root would show a file listing"
+
+  # 4.8: one-click helper to register a keyed onion's key with the gateway.
+  grep -q 'add-onion-key' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "key helper" ok "Add Onion Key shortcut installed" \
+    || chk "key helper" no "stale - keyed onions would need the terminal"
+
+  # 4.9: launcher icons rasterized to PNG so xfdesktop renders them without the
+  # gdk-pixbuf SVG loader (which the image does not ship).
+  grep -q 'rsvg-convert' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "launcher icons" ok "rasterized to PNG for the desktop" \
+    || chk "launcher icons" no "stale - SVG launcher icons would show generic"
+
+  # 4.10: OnionShare chat off the broken gevent-websocket path onto the
+  # maintained threading + simple-websocket backend (works on Python 3.12).
+  grep -q 'simple-websocket' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "chat websocket" ok "maintained backend (threading + simple-websocket)" \
+    || chk "chat websocket" no "stale - chat socket would upgrade but pump no frames"
+
+  # 4.11: desktop TLS is optional (LAB_TLS); default HTTP on loopback avoids the
+  # browser's self-signed-cert warning, LAB_TLS=on restores HTTPS.
+  grep -q 'LAB_TLS' "$LAB_ROOT/images/workstation/entrypoint.sh" 2>/dev/null \
+    && chk "desktop tls" ok "optional (LAB_TLS); HTTP on loopback by default" \
+    || chk "desktop tls" no "stale - expected the LAB_TLS switch"
+
+  # 4.8: Tor Browser channel is arch-aware (stable on x86_64, alpha on arm64).
+  grep -q 'TB_VERSION_X86' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "tor browser" ok "stable on x86_64, alpha on arm64 (only ARM build)" \
+    || chk "tor browser" no "stale - expected the arch-aware Tor Browser pin"
+
+  # 5.1.4: check scripts must not name an image tag compose no longer builds.
+  # 1.5 graded against :4.11 for a whole release while compose built :5.0, and
+  # nothing here noticed. Compare what the checks name against what compose has.
+  local ctag btags stale_tags=""
+  btags="$(grep -oE 'image: darkweb-lab-[a-z]+:[0-9A-Za-z._-]+' "$LAB_ROOT/compose.yml" \
+           | sed 's/.*://' | sort -u)"
+  for ctag in $(grep -rhoE 'darkweb-lab-[a-z]+:[0-9A-Za-z._-]+' "$LAB_ROOT/labs/checks" 2>/dev/null \
+                | sed 's/.*://' | sort -u); do
+    printf '%s\n' "$btags" | grep -qx "$ctag" || stale_tags="$stale_tags $ctag"
+  done
+  [ -z "$stale_tags" ] \
+    && chk "check image tags" ok "every tag the checks name is built by compose" \
+    || chk "check image tags" no "stale -$stale_tags not built by compose.yml"
+
+  # 5.2.2: the portal bind-mounts site/, and an empty directory is a 403 and an
+  # unhealthy container on a fresh clone. site/ is not in this repository, so the
+  # placeholder is generated by check_site at `./lab up` instead of committed.
+  grep -q 'PLACEHOLDER' "$LAB_ROOT/lab" \
+    && chk "portal placeholder" ok "generated at ./lab up when site/ is empty" \
+    || chk "portal placeholder" no "stale - portal would 403 on a fresh clone"
+
+  # 5.2.2: the README states the Tor Browser versions as fact. It said 15.0.19
+  # for a release after compose moved to 15.0.21 — the same drift as ./lab doctor
+  # naming a variable nothing read, and the same cost: a reader trusts the prose
+  # and pins a version that 404s. Compare the two.
+  local tb_x86 tb_arm readme_missing=""
+  tb_x86="$(sed -n 's/.*LAB_TB_VERSION_X86:-\([0-9A-Za-z.]*\)}.*/\1/p' "$LAB_ROOT/compose.yml" | head -1)"
+  tb_arm="$(sed -n 's/.*LAB_TB_VERSION_ARM:-\([0-9A-Za-z.]*\)}.*/\1/p' "$LAB_ROOT/compose.yml" | head -1)"
+  for v in "$tb_x86" "$tb_arm"; do
+    [ -n "$v" ] || continue
+    grep -q "$v" "$LAB_ROOT/README.md" 2>/dev/null || readme_missing="$readme_missing $v"
+  done
+  [ -z "$readme_missing" ] \
+    && chk "README tor pins" ok "README matches the versions compose builds ($tb_x86 / $tb_arm)" \
+    || chk "README tor pins" no "stale - compose builds$readme_missing, README says otherwise"
+
+  # 5.2.1: `docker exec ... | grep -q` under pipefail is a race, not a test. grep
+  # exits on the first match, the Docker CLI takes SIGPIPE, and pipefail calls a
+  # true assertion failed. Lab 2.7's DROP check (pattern on line one) flaked ~40%
+  # of runs on it. Use dex_has from labs/checks/_lib.sh instead. A pipe inside a
+  # container-side `sh -c` is fine: that shell has no pipefail.
+  # Only a HOST-side pipe is racy. If `sh -c` appears before the pipe, the pipe
+  # runs in the container's own shell, which has no pipefail — that is fine.
+  local racy
+  racy="$(awk '
+      /docker exec/ {
+        p = match($0, /\|[[:space:]]*grep[[:space:]]+-q/)
+        if (p == 0) next
+        s = index($0, "sh -c")
+        if (s == 0 || s > p) print FILENAME
+      }' "$LAB_ROOT"/labs/checks/[0-9]*.sh 2>/dev/null \
+      | sort -u | xargs -r -n1 basename | tr '\n' ' ')"
+  [ -z "$racy" ] \
+    && chk "check pipelines" ok "no docker exec piped into grep -q under pipefail" \
+    || chk "check pipelines" no "racy grep -q pipeline in: $racy"
+
+  # 5.2.0: .onion has no DNS answer, so any helper that fetches one must hand the
+  # name to Tor. A plain curl here returns an empty body and a sha256 of nothing.
+  ! grep -qE 'curl -s --max-time 4[0] "http' "$LAB_ROOT/lab" \
+    && chk "range fetch proxy" ok "range helpers fetch .onion through SOCKS" \
+    || chk "range fetch proxy" no "stale - a range helper curls .onion with no proxy"
+
+  grep -q 'tigervnc-standalone-server' "$wsd" 2>/dev/null \
+    && chk "vnc server" ok "TigerVNC from Ubuntu's repos" \
+    || chk "vnc server" no "stale — expected TigerVNC"
+
+  grep -q 'novnc websockify' "$wsd" 2>/dev/null \
+    && chk "web client" ok "noVNC — a plain directory we own" \
+    || chk "web client" no "stale — expected noVNC"
+
+  # /bin/sh is dash on Ubuntu. Running a bash script as `sh script` ignores the
+  # shebang and dies on the first bashism — pipefail, arrays, [[ ]].
+  local bad=""
+  for f in "$LAB_ROOT"/images/*/*.sh; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f")"
+    head -1 "$f" | grep -q 'bin/bash' || continue
+    # The word boundary matters: "COPY x.sh /tmp/x.sh" contains the literal
+    # text "sh /tmp/x.sh" and would match a naive pattern.
+    grep -qE "(^|[[:space:]])sh[[:space:]]+[^[:space:]]*/$base" \
+      "$LAB_ROOT"/images/*/Dockerfile 2>/dev/null && bad="$bad $base"
+  done
+  [ -z "$bad" ] \
+    && chk "shell match" ok "bash scripts invoked with bash" \
+    || chk "shell match" no "invoked with sh:$bad — dash will reject bashisms"
+
+  # vncconfig is what bridges X selections to the VNC protocol. Without it the
+  # clipboard panel in the browser appears to work and moves nothing.
+  grep -q 'vncconfig -nowin' "$LAB_ROOT/images/workstation/xstartup" 2>/dev/null \
+    && chk "clipboard" ok "vncconfig bridges the selections" \
+    || chk "clipboard" no "stale — copy and paste will not work"
+
+  grep -q 'autocutsel -selection PRIMARY' "$LAB_ROOT/images/workstation/xstartup" 2>/dev/null \
+    && chk "selections" ok "PRIMARY bridged; CLIPBOARD left to vncconfig" \
+    || chk "selections" no "middle-click and Ctrl+V would disagree"
+
+  grep -q 'ubuntu:noble' "$LAB_ROOT/compose.yml" 2>/dev/null \
+    && chk "base image" ok "24.04 LTS, pinned by date" \
+    || chk "base image" no "check the base — a devel release ages badly"
+
+  # KasmVNC reads ~/.kasmpasswd. Writing to ~/.vnc/passwd (TigerVNC's path)
+  # leaves no user with write permission, and vncserver then prompts
+  # interactively — which loops forever with no terminal attached.
+  grep -q 'darkweb-clipboard.js' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "clipboard sync" ok "auto sync injected into noVNC" \
+    || chk "clipboard sync" no "panel only — no automatic sync"
+
+  # Injecting the script proves nothing on its own. noVNC's app/ui.js is an ES
+  # module that exports the UI singleton without putting it on window, so the
+  # script can be present, load correctly, and still be unable to see the
+  # connection it needs. Check that the seam is opened.
+  grep -q 'window.UI = UI' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "clipboard reach" ok "UI singleton exposed to the bridge" \
+    || chk "clipboard reach" no "bridge cannot reach RFB — sync is dead code"
+
+  grep -q 'AcceptCutText' "$LAB_ROOT/images/workstation/entrypoint.sh" 2>/dev/null \
+    && chk "cut text" ok "clipboard enabled on the server" \
+    || chk "cut text" no "stale — the server would refuse clipboard traffic"
+
+  # websockify must be the container's main process. Started with --daemon it
+  # can fail while the container carries on looking alive and serving nothing.
+  grep -q 'exec websockify' "$LAB_ROOT/images/workstation/entrypoint.sh" 2>/dev/null \
+    && chk "web bridge" ok "websockify runs in the foreground" \
+    || chk "web bridge" no "stale — a failure would go unnoticed"
+
+  # xdpyinfo is in x11-utils, not x11-xserver-utils. Probing with it while the
+  # wrong package is installed times out every time, and the exit that follows
+  # turns a missing binary into a container crash loop.
+  grep -q 'dev/tcp/127.0.0.1' "$LAB_ROOT/images/workstation/entrypoint.sh" 2>/dev/null \
+    && chk "readiness probe" ok "TCP check, no extra binary needed" \
+    || chk "readiness probe" no "stale — probe depends on a package that may be absent"
+
+  grep -q '< /dev/null' "$LAB_ROOT/images/workstation/entrypoint.sh" 2>/dev/null \
+    && chk "no prompts" ok "vncserver stdin closed" \
+    || chk "no prompts" no "stale — an interactive prompt would loop silently"
+
+  # Tor Browser starts its own tor unless told not to. Inside an already-torified
+  # namespace that produces tor over tor: slower, and worse for anonymity rather
+  # than better, because it makes the path unusual.
+  # Environment alone is not enough on the 16.0 series: the browser still probes
+  # a control port it cannot authenticate to, and reports "Tor exited during
+  # startup". The launcher has to be disabled in the profile as well.
+  if grep -q 'TOR_SKIP_LAUNCH' \
+       "$LAB_ROOT/images/workstation/tor-browser-launch.sh" 2>/dev/null; then
+    grep -q 'torlauncher.start_tor' \
+      "$LAB_ROOT/images/workstation/tor-browser-launch.sh" 2>/dev/null \
+      && chk "tor browser" ok "launcher disabled in the profile too" \
+      || chk "tor browser" no "env only — will report 'Tor exited during startup'"
+  else
+    chk "tor browser" no "stale — would run tor over tor"
+  fi
+
+  # KasmVNC inlines its logo as base64 in index.html, vnc.html and the minified
+  # CSS. Replacing the PNG files alone changes nothing visible.
+  # The control-bar and "Connecting…" logos live as data URIs inside the
+  # webpack bundle. Processing only html/css leaves both on screen.
+  grep -q 'novnc|logo|brand' "$LAB_ROOT/images/workstation/rebrand.py" 2>/dev/null \
+    && chk "rebranding" ok "brand marks replaced, control icons left alone" \
+    || chk "rebranding" no "stale — the vendor logo will survive"
+
+  grep -q 'librsvg2-bin' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "rasteriser" ok "librsvg2-bin present for the icon sizes" \
+    || chk "rasteriser" no "PNG icons cannot be regenerated"
+
+  grep -q 'proxy_dns' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "proxychains" ok "configured with proxy_dns" \
+    || chk "proxychains" no "stale — hostnames would resolve outside the tunnel"
+
+  grep -q 'onionshare' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "onionshare" ok "installed" \
+    || chk "onionshare" no "missing"
+
+  grep -q 'packages.mozilla.org' "$LAB_ROOT/images/workstation/Dockerfile" 2>/dev/null \
+    && chk "firefox" ok "from Mozilla's repo, not the snap stub" \
+    || chk "firefox" no "missing — Ubuntu's package cannot run in a container"
+
+  grep -qx 'USER root' "$wsd" 2>/dev/null \
+    && chk "build user" ok "reset to root explicitly" \
+    || chk "build user" no "stale — inherits whatever the base left set"
+
+  grep -q 'openssl req -x509' "$wsd" 2>/dev/null \
+    && chk "tls cert" ok "generated at build time" \
+    || chk "tls cert" no "stale — a committed PEM publishes its private key"
+
+  # Ubuntu 24.04 ships a default account at uid 1000. Creating ours without
+  # clearing it first fails with "GID '1000' already exists".
+  if grep -q 'useradd' "$wsd" 2>/dev/null; then
+    grep -q 'getent passwd' "$wsd" 2>/dev/null \
+      && chk "analyst account" ok "uid 1000 cleared before it is claimed" \
+      || chk "analyst account" no "stale — will collide with noble's default user"
+  else
+    chk "analyst account" no "stale — no account created"
+  fi
+
+  grep -q 'LAB_VNC_PW' "$LAB_ROOT/lab" 2>/dev/null \
+    && chk "lab creds" ok "derived, not cached" \
+    || chk "lab creds" no "stale — may print a cached username"
+
+  local ws="images/workstation"
+  if [ -f "$LAB_ROOT/$ws/branding/background.png" ]; then
+    ok "wallpaper file" "branding/background.png present"
+  else
+    warn "wallpaper file" "none supplied — desktop keeps the stock image"
+  fi
+
+  [ -f "$LAB_ROOT/$ws/branding/logo.svg" ] \
+    && ok "logo file" "branding/logo.svg present" \
+    || warn "logo file" "none supplied — vendor branding stays"
+
+  echo
+  if [ "$fail" -gt 0 ]; then
+    bad "result" "$fail file(s) out of date — git pull, then ./lab rebuild"
+    return 1
+  fi
+  ok "result" "repo is consistent"
+}
+
+# Branding and other file-copy changes land in cached layers. This forces them.
+cmd_rebuild() {
+  need_compose
+  local stack="${1:-base}"
+  head_ "Rebuilding $stack without cache"
+  dc --profile "$stack" build --no-cache
+  dc --profile "$stack" up -d
+  echo
+  dc ps
+}
+
+cmd_list() {
+  need_compose
+  head_ "Available stacks"
+  dc config --profiles 2>/dev/null \
+    | sed 's/^/  /' || echo "  (none defined)"
+  echo
+}
+
+cmd_up() {
+  check_site
+  local stack="${1:-base}"
+  need_compose
+  dc --profile "$stack" up -d || return 1
+  echo
+  dc ps
+  echo
+  cmd_open
+}
+
+# Stop and remove one overlay stack's containers by name prefix — this catches
+# both the compose nodes (darkweb-i2p-*, darkweb-fn-*) AND the transient socat
+# console bridge (darkweb-i2p-console / darkweb-fn-console), which is not a compose
+# service. With purge, also drop that stack's seed volume and internal network.
+# It never touches base containers or the evidence volume.
+_down_stack() {
+  local stack="$1" purge="${2:-}" prefix="" seedvol="" net=""
+  case "$stack" in
+    i2p)      prefix="darkweb-i2p-"; seedvol="darkweb_i2p_seed"; net="darkweb_i2pnet" ;;
+    hyphanet) prefix="darkweb-fn-";  seedvol="darkweb_fn_seed";  net="darkweb_fnnet"  ;;
+    range)    prefix="darkweb-range-"; seedvol="darkweb_range_content"; net="darkweb_rangenet" ;;
+    *) return 0 ;;
+  esac
+  local ids
+  ids="$(docker ps -aq --filter "name=${prefix}" 2>/dev/null)"
+  if [ -n "$ids" ]; then
+    if docker rm -f $ids >/dev/null 2>&1; then
+      echo "  ${stack}: stopped and removed $(printf '%s\n' "$ids" | grep -c .) container(s)"
+    else
+      echo "  ${stack}: could not remove some containers (are they in use?)"
+    fi
+  else
+    echo "  ${stack}: no containers to remove"
+  fi
+  if [ -n "$purge" ]; then
+    docker volume  rm "$seedvol" >/dev/null 2>&1 && echo "  ${stack}: removed seed volume ${seedvol}"
+    docker network rm "$net"     >/dev/null 2>&1 && echo "  ${stack}: removed network ${net}"
+  fi
+}
+
+cmd_down() {
+  need_compose
+  local target="" purge=""
+  for a in "$@"; do
+    case "$a" in
+      --volumes|-v|--purge) purge=1 ;;
+      -*) echo "unknown flag: $a"; return 1 ;;
+      *)  [ -z "$target" ] && target="$a" ;;
+    esac
+  done
+
+  case "${target:-all}" in
+    all)
+      # everything, containers + networks, volumes kept (evidence is never dropped)
+      dc --profile '*' down
+      if [ -n "$purge" ]; then echo "  (note: --volumes ignored for 'all' — the evidence volume is never auto-removed; use ./lab down i2p|hyphanet|range --volumes to drop its volume)"; fi
+      ;;
+    base)
+      dc --profile base down
+      if [ -n "$purge" ]; then echo "  (note: --volumes ignored for 'base' — evidence is never auto-removed)"; fi
+      ;;
+    i2p)         _down_stack i2p "$purge" ;;
+    hyphanet|fn) _down_stack hyphanet "$purge" ;;
+    range)       _down_stack range "$purge" ;;
+    overlays)    _down_stack i2p "$purge"; _down_stack hyphanet "$purge" ;;
+    *)
+      echo "usage: ./lab down [i2p|hyphanet|range|overlays|base|all] [--volumes]"
+      echo "  no argument tears down everything (keeps volumes)"
+      echo "  --volumes also drops the i2p/hyphanet/range volume (never the evidence volume)"
+      return 1 ;;
+  esac
+}
+
+_stop_stack() {
+  local stack="$1" prefix=""
+  case "$stack" in
+    i2p)      prefix="darkweb-i2p-" ;;
+    hyphanet) prefix="darkweb-fn-"  ;;
+    range)    prefix="darkweb-range-" ;;
+    *) return 0 ;;
+  esac
+  local ids
+  ids="$(docker ps -q --filter "name=${prefix}" 2>/dev/null)"
+  if [ -n "$ids" ]; then
+    if docker stop $ids >/dev/null 2>&1; then
+      echo "  ${stack}: stopped $(printf '%s\n' "$ids" | grep -c .) container(s) — kept; ./lab up ${stack} resumes them"
+    else
+      echo "  ${stack}: could not stop some containers"
+    fi
+  else
+    echo "  ${stack}: no running containers to stop"
+  fi
+}
+
+cmd_stop() {
+  need_compose
+  local target="${1:-all}"
+  # stop = pause containers without removing them. Data, volumes, and networks are
+  # never touched; ./lab up <stack> restarts them quickly. Use ./lab down to remove.
+  case "$target" in
+    all)         dc --profile '*' stop ;;
+    base)        dc --profile base stop ;;
+    i2p)         _stop_stack i2p ;;
+    hyphanet|fn) _stop_stack hyphanet ;;
+    range)       _stop_stack range ;;
+    overlays)    _stop_stack i2p; _stop_stack hyphanet ;;
+    *)
+      echo "usage: ./lab stop [i2p|hyphanet|range|overlays|base|all]"
+      echo "  stops containers without removing them; ./lab up <stack> resumes them fast"
+      echo "  no argument stops everything (containers kept; use ./lab down to remove them)"
+      return 1 ;;
+  esac
+}
+
+cmd_reset() {
+  local stack="${1:-base}"
+  need_compose
+  printf 'Resetting %s. Evidence is preserved; scratch state is discarded.\n' "$stack"
+  dc --profile "$stack" down
+  # scratch volumes only — never the evidence volume
+  docker volume ls -q --filter 'name=darkweb_.*scratch' | while read -r v; do
+    [ -n "$v" ] && docker volume rm "$v" >/dev/null && echo "  removed $v"
+  done
+  dc --profile "$stack" up -d
+  echo "Done."
+}
+
+cmd_open() {
+  local scheme="http"; [ "${LAB_TLS:-off}" = "on" ] && scheme="https"
+  local url="${scheme}://127.0.0.1:6901"
+  printf '  desktop  %s\n' "$url"
+  printf '  portal   http://10.152.152.20  (from inside the desktop)\n'
+  have xdg-open  && xdg-open  "$url" >/dev/null 2>&1 &
+  have wslview   && wslview   "$url" >/dev/null 2>&1 &
+  return 0
+}
+
+cmd_creds() {
+  need_compose          # loads .env into the environment
+  local pw="${LAB_VNC_PW:-}"
+
+  # TigerVNC authenticates on the password alone — there is no username, and
+  # the noVNC prompt asks only for a password. The desktop account is `darkweb`
+  # once you are inside.
+  [ -n "$pw" ] || die "no credentials yet — run './lab up base' first"
+
+  head_ "Lab desktop"
+  local scheme="http"; [ "${LAB_TLS:-off}" = "on" ] && scheme="https"
+  printf '  %-12s %s\n' "url"      "${scheme}://127.0.0.1:6901"
+  printf '  %-12s %s\n' "password" "$pw"
+  printf '  %-12s %s\n' "shell user" "darkweb"
+  printf '  %-12s %s\n' "sudo pass" "darkweb  (for the Chapter 2 apt/nmap steps)"
+  echo
+  printf '  %s\n\n' "Stored in .env, which is gitignored. Rotate with ./lab rotate-creds."
+}
+
+# Replace the desktop password. Useful after sharing a screen, and required
+# before handing a running lab to someone else.
+cmd_rotate_creds() {
+  local envf="$LAB_ROOT/.env"
+  [ -f "$envf" ] || die "nothing to rotate — run './lab up base' first"
+  sed -i '/^LAB_VNC_PW=/d' "$envf"
+  ensure_creds
+  load_env
+  head_ "Rotated"
+  printf '  %s\n\n' "Restart the stack for it to take effect: ./lab up base"
+}
+
+# ci — everything that runs without Docker: repo consistency, every engine's
+# offline self-test, and every Docker-free lab check. This is what CI runs on
+# each commit and what you can run locally before you push; it exits non-zero if
+# anything fails, so a drifted check or a broken engine fails the build instead
+# of surfacing later as a reader hitting a wall.
+cmd_ci() {
+  printf '\n  CI  (lab %s)\n\n' "$LAB_VERSION"
+  local fail=0 s id e a
+
+  echo "  repo consistency"
+  if cmd_selftest >/dev/null 2>&1; then echo "  PASS  selftest"
+  else echo "  FAIL  selftest  (run ./lab selftest to see what drifted)"; fail=$((fail+1)); fi
+
+  echo; echo "  engine self-tests (offline)"
+  for e in crawl dedup market leak link detect capstone; do
+    if "$LAB_ROOT/lab" "$e" selftest >/dev/null 2>&1; then echo "  PASS  $e selftest"
+    else echo "  FAIL  $e selftest"; fail=$((fail+1)); fi
+  done
+  for a in range-content/seed range-scorer/scorer correlate/correlate \
+           i2p-netdb/eclipse hyphanet-routing/routing \
+           ransomchat/seed ransomchat/analyze report-viz/report; do
+    if python3 "$LAB_ROOT/labs/artifacts/$a.py" --selftest >/dev/null 2>&1; then echo "  PASS  ${a##*/} --selftest"
+    else echo "  FAIL  ${a##*/} --selftest"; fail=$((fail+1)); fi
+  done
+  if python3 "$LAB_ROOT/images/ransomchat/session.py" --selftest >/dev/null 2>&1; then
+    echo "  PASS  ransomchat/session --selftest"
+  else echo "  FAIL  ransomchat/session --selftest"; fail=$((fail+1)); fi
+  for a in ransomwatch/seed ransomwatch/monitor ransomwatch/sites agora/seed agora/slice; do
+    if python3 "$LAB_ROOT/labs/datasets/$a.py" --selftest >/dev/null 2>&1; then echo "  PASS  datasets/${a} --selftest"
+    else echo "  FAIL  datasets/${a} --selftest"; fail=$((fail+1)); fi
+  done
+
+  echo; echo "  offline checks (no Docker)"
+  for s in "$LAB_ROOT"/labs/checks/*.sh; do
+    # _lib.sh and friends are sourced by the checks, not run as one
+    case "$(basename "$s")" in _*) continue;; esac
+    # skip anything that talks to Docker directly, or delegates to another check
+    # script (the Ch5 synthesis checks re-run the Docker-backed 2.x/3.x checks).
+    # Sourcing _lib.sh counts as talking to Docker: dex_has runs docker exec, and
+    # a converted check may no longer contain the literal string "docker ".
+    grep -qE 'docker |dex_has|_lib\.sh|[0-9]\.sh' "$s" && continue
+    id="$(basename "$s" .sh)"
+    if bash "$s" >/dev/null 2>&1; then echo "  PASS  check $id"
+    else echo "  FAIL  check $id"; fail=$((fail+1)); fi
+  done
+
+  if [ -f "$LAB_ROOT/labs/booktest.py" ]; then
+    echo; echo "  book integrity"
+    if python3 "$LAB_ROOT/labs/booktest.py" >/dev/null 2>&1; then echo "  PASS  booktest"
+    else echo "  FAIL  booktest"; fail=$((fail+1)); fi
+  fi
+
+  printf '\n'
+  if [ "$fail" -eq 0 ]; then echo "  result   everything offline is green"; return 0; fi
+  echo "  result   $fail failing"; return 1
+}
+
+# booktest — test the manuscript itself: structure, cross-references, figures,
+# command coverage, prose hygiene, accessibility (alt text), and rendering.
+# Offline and stdlib-only; the rendering check runs only when Playwright is
+# present. The book's counterpart to `./lab ci` (which tests the lab code); it
+# also runs inside `./lab ci`.
+cmd_booktest() {
+  if [ ! -f "$LAB_ROOT/labs/booktest.py" ]; then
+    printf '\n  BOOK TEST\n\n  skipped: this edition carries the labs, not the manuscript\n\n'
+    return 0
+  fi
+  python3 "$LAB_ROOT/labs/booktest.py"
+}
+
+# ransomchat — the Chapter 12 negotiation training simulator: a local Ollama model
+# plus a helpdesk chat, the operator seeded from the Casualtek behaviour DB.
+# Defensive training only; the operator refuses real attack help.
+cmd_ransomchat() {
+  local sub="${1:-up}"; [ "$#" -gt 0 ] && shift
+  case "$sub" in
+    up|"")
+      need_compose
+      # build the local chat image first, since it has no registry to pull from;
+      # so a plain `up` would try to pull it and fail. ollama still pulls normally.
+      dc --profile ransomchat build ransomchat || return 1
+      dc --profile ransomchat up -d ollama ransomchat || return 1
+      echo "  ransomchat: http://127.0.0.1:8090"
+      echo "  on a remote Docker host, forward it:     ssh -N -L 8090:127.0.0.1:8090 <user>@<host>"
+      echo "  first time only, pull the local model:  ./lab ransomchat pull"
+      echo "  then analyse a saved chat:              ./lab leak negotiate <file>"
+      ;;
+    pull)   docker exec darkweb-ollama ollama pull "${LAB_CHAT_MODEL:-llama3.1:8b}" ;;
+    down)   need_compose; dc --profile ransomchat down ;;
+    logs)   docker logs --tail 80 darkweb-ransomchat 2>&1 ;;
+    open)   echo "  open http://127.0.0.1:8090"
+            echo "  (remote host? ssh -N -L 8090:127.0.0.1:8090 <user>@<host> first)" ;;
+    *)      echo "usage: ./lab ransomchat [up|pull|down|logs|open]" ;;
+  esac
+}
+
+cmd_check() {
+  local id="${1:-}"
+  [ -n "$id" ] || die "usage: ./lab check <lab-id>   e.g. ./lab check 1.1"
+  local script="$LAB_ROOT/labs/checks/$id.sh"
+  [ -f "$script" ] || die "no check defined for lab $id yet"
+  bash "$script"
+}
+
+cmd_ps() {
+  need_compose
+  dc --profile '*' ps
+}
+
+# I2P testnet helpers (Chapter 6). Thin wrappers around the routers' real i2pd
+# interfaces — a convenience layer for the chapter. The checks call docker exec
+# directly and do NOT depend on this. SCAFFOLD: the console bridge and the
+# console-page parsing follow i2pd's web console and may need adjusting to your
+# i2pd version; the testnet must be converged (./lab check 6.1) for most of it.
+cmd_i2p() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local r="${1:-r1}"
+  local cname="darkweb-i2p-${r}"
+  case "$sub" in
+    console)
+      # Bridge the router's console (7070) to the host with a throwaway socat
+      # container on the internal net; then browse http://127.0.0.1:7070.
+      docker rm -f darkweb-i2p-console >/dev/null 2>&1 || true
+      if docker run -d --rm --name darkweb-i2p-console \
+           --network darkweb_i2pnet -p 127.0.0.1:7070:7070 \
+           alpine/socat tcp-listen:7070,fork,reuseaddr "tcp:${cname}:7070" >/dev/null 2>&1; then
+        echo "  console for ${cname} -> http://127.0.0.1:7070"
+        echo "  (stop it with: docker rm -f darkweb-i2p-console)"
+      else
+        echo "  couldn't start the console bridge; read it in-container instead:"
+        echo "    docker exec ${cname} wget -qO- http://127.0.0.1:7070/"
+      fi
+      ;;
+    netdb)
+      # Count files, not a naming assumption. Peers land as
+      # netDb/rX/routerInfo-<hash>.dat on this i2pd, and while routerInfo-*.dat
+      # does match those, *.dat survives a layout change and is what the
+      # healthcheck and Lab 6.1 grade on. One number, one definition.
+      docker exec "$cname" sh -c '
+        d="${I2P_DATADIR:-/home/i2pd/data}/netDb"
+        n=$(find "$d" -type f -name "*.dat" 2>/dev/null | wc -l)
+        echo "  known routers   : $n"
+        if [ "$n" -eq 0 ]; then
+          echo "  note            : zero is normal for the first few minutes."
+          echo "                    Still zero after ~5? Check that peers publish a"
+          echo "                    reachable address: ./lab i2p console '"'"'"$(hostname)"'"'"'"
+        fi
+        echo "  floodfills      : ff1, ff2 (floodfill = true in their config)"
+      ' 2>/dev/null || echo "  (router ${cname} not up? bring the testnet up: ./lab up i2p)"
+      ;;
+    tunnels)
+      docker exec "$cname" sh -c \
+        'wget -qO- "http://127.0.0.1:7070/?page=tunnels" 2>/dev/null | sed "s/<[^>]*>//g" | grep -iE "inbound|outbound|tunnel" | head' \
+        2>/dev/null || echo "  (couldn't read tunnels from ${cname}; is the testnet converged?)"
+      ;;
+    publish|eepsite)
+      echo "  scaffold: expose a web server on ${r} via an i2pd [server] tunnel."
+      echo "  add a server tunnel to ${cname}'s tunnels.conf, restart it, then read"
+      echo "  the destination's .b32 from the console. See Lab 6.4 for the steps."
+      ;;
+    fetch)
+      local b32="${2:-}"
+      [ -n "$b32" ] || { echo "usage: ./lab i2p fetch <router> <name.b32.i2p>"; return 1; }
+      docker exec "$cname" sh -c \
+        "wget -qO- --timeout=30 -e use_proxy=yes -e http_proxy=http://127.0.0.1:4444 'http://$b32' 2>/dev/null | head" \
+        || echo "  (fetch failed — leaseSet not found or service down; eepsites flicker)"
+      ;;
+    *)
+      echo "usage: ./lab i2p {console|netdb|tunnels|publish|eepsite|fetch} <router> [arg]"
+      echo "  routers: ff1 ff2 r1 r2 r3   (bring the testnet up with ./lab up i2p)"
+      return 1
+      ;;
+  esac
+}
+
+# Hyphanet (Fred) testnet helpers (Chapter 7). Thin wrappers over FProxy / FCP /
+# docker exec — a convenience layer for the chapter. The checks call docker exec
+# directly and do NOT depend on this. SCAFFOLD: insert/fetch/genkey use FCP, which
+# is version-sensitive, and the darknet must be settled first (./lab check 7.1).
+cmd_fn() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local n="${1:-n1}"
+  local cname="darkweb-fn-${n}"
+  case "$sub" in
+    console)
+      docker rm -f darkweb-fn-console >/dev/null 2>&1 || true
+      if docker run -d --rm --name darkweb-fn-console \
+           --network darkweb_fnnet -p 127.0.0.1:8888:8888 \
+           alpine/socat tcp-listen:8888,fork,reuseaddr "tcp:${cname}:8888" >/dev/null 2>&1; then
+        echo "  FProxy for ${cname} -> http://127.0.0.1:8888"
+        echo "  (stop it with: docker rm -f darkweb-fn-console)"
+      else
+        echo "  couldn't start the FProxy bridge; read it in-container instead:"
+        echo "    docker exec ${cname} wget -qO- http://127.0.0.1:8888/"
+      fi
+      ;;
+    peers)
+      docker exec "$cname" sh -c \
+        'grep -q "opennet.enabled=false" /data/freenet.ini 2>/dev/null && echo "  opennet: DISABLED (darknet)"; ls /data/friend-*.fref 2>/dev/null | wc -l | sed "s/^/  darknet peer refs: /"' \
+        2>/dev/null || echo "  (node ${cname} not up? bring it up: ./lab up hyphanet)"
+      ;;
+    store)
+      docker exec "$cname" sh -c \
+        'grep -E "storeSize" /data/freenet.ini 2>/dev/null | sed "s/^/  /"; echo "  blocks encrypted; cached/relayed content is not readable by this node"' \
+        2>/dev/null || echo "  (node ${cname} not up?)"
+      ;;
+    insert|fetch|genkey|putsite)
+      echo "  scaffold: '${sub}' uses the Freenet Client Protocol (FCP) on ${cname}:9481."
+      echo "  FCP is version-sensitive; drive it with an FCP client against the node, or"
+      echo "  use FProxy. See Lab 7.2 (insert/fetch) and 7.3 (keys/freesites) for the steps."
+      ;;
+    *)
+      echo "usage: ./lab fn {console|insert|fetch|genkey|putsite|peers|store} <node> [arg]"
+      echo "  nodes: n1 n2 n3 n4   (bring the testnet up with ./lab up hyphanet)"
+      return 1
+      ;;
+  esac
+}
+
+cmd_range() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local art="$LAB_ROOT/labs/artifacts/range-scorer"
+  local tor="darkweb-range-tor" ws="darkweb-workstation"
+  case "$sub" in
+    list)
+      local filter="${1:-}" map
+      case "$filter" in
+        --cross)
+          echo "  cross-network references in the range directory:"
+          RANGE_MANIFEST="$art/manifest.json" python3 -c "
+import json, os
+m = json.load(open(os.environ['RANGE_MANIFEST']))
+for c in m.get('cross_links', []):
+    print('    %-9s -> (%s) %s' % (c['from'], c['network'], c.get('kind', '')))
+print('  following these requires the I2P / Hyphanet transports, not Tor')
+"
+          ;;
+        *)
+          map="$(docker exec "$tor" cat /content/onions.env 2>/dev/null)" \
+            || { echo "  range not up? bring it up: ./lab up range"; return 1; }
+          if [ "$filter" = "--directory" ]; then
+            echo "  services listed in the range directory (a subset — discovery is incomplete):"
+            printf '%s\n' "$map" | grep -E '^(directory|market|market-mirror|forum)=' | sed 's/^/    /'
+          else
+            echo "  range services (onion addresses are ephemeral — regenerated each bring-up):"
+            printf '%s\n' "$map" | sed 's/^/    /'
+          fi
+          ;;
+      esac
+      ;;
+    truth)
+      [ -f "$art/manifest.json" ] || { echo "  no manifest at $art/manifest.json"; return 1; }
+      echo "  range ground truth (services, mirror/clone relationships, cross-links):"
+      python3 -m json.tool "$art/manifest.json"
+      ;;
+    score)
+      local f="${1:-}"; [ -n "$f" ] || { echo "usage: ./lab range score <crawl-output.json>"; return 1; }
+      [ -f "$f" ] || f="$art/$f"
+      [ -f "$f" ] || { echo "  no such crawl file: ${1} (also tried $art/)"; return 1; }
+      # Bind the answer key to the range that is running, if it is: manifest.json
+      # ships addr-* placeholders and the live range mints new onions on every
+      # bring-up, so without this a live crawl scores zero against a good crawl.
+      # No range up means an archived crawl, which scores against the placeholders
+      # exactly as before.
+      local livemap
+      livemap="$(docker exec "$tor" cat /content/onions.env 2>/dev/null)"
+      if [ -n "$livemap" ]; then
+        printf '%s\n' "$livemap" | python3 "$art/scorer.py" "$f" --map -
+      else
+        python3 "$art/scorer.py" "$f"
+      fi
+      ;;
+    seed)
+      docker exec "$tor" python3 /opt/seed.py --out /content \
+        && echo "  regenerated watermarked content in the range" \
+        || { echo "  (range not up? ./lab up range)"; return 1; }
+      ;;
+    flap)
+      local svc="${1:-leak}"
+      echo "  range: simulating seizure/rebrand of '${svc}' — dropping its onion key"
+      # onions.env is written once, at container start. Without rewriting it here
+      # the seized address stays in the file, `./lab range list` reports an onion
+      # that no longer exists, and the service looks dead everywhere — which is
+      # the opposite of the lesson. The service is alive at a NEW address.
+      local newonion
+      newonion="$(docker exec "$tor" sh -c '
+        svc="$1"; dir="/var/lib/tor/range-${svc}"; hn="${dir}/hostname"; env=/content/onions.env
+        [ -d "$dir" ] || { echo "no such range service: ${svc}" >&2; exit 1; }
+        rm -rf "$dir"
+        mkdir -p "$dir" && chown tor:tor "$dir" && chmod 700 "$dir"
+        pkill -HUP tor || kill -HUP 1
+        n=0
+        while [ ! -s "$hn" ] && [ "$n" -lt 60 ]; do sleep 2; n=$((n+1)); done
+        new="pending"; [ -s "$hn" ] && new="$(cat "$hn")"
+        tmp="$(mktemp)"
+        grep -v "^${svc}=" "$env" > "$tmp" 2>/dev/null
+        echo "${svc}=${new}" >> "$tmp"
+        cat "$tmp" > "$env"          # in place: /content is a bind mount
+        rm -f "$tmp"
+        printf "%s" "$new"
+      ' _ "$svc" 2>/dev/null)" \
+        || { echo "  (range not up? ./lab up range)"; return 1; }
+      if [ -z "$newonion" ] || [ "$newonion" = "pending" ]; then
+        echo "  range: '${svc}' key dropped, but it has not republished yet — re-check with ./lab range list"
+      else
+        echo "  range: '${svc}' republished at ${newonion}"
+        echo "  a crawler holding the old address now collects nothing; onions.env is updated"
+      fi
+      ;;
+    fetch)
+      local svc="${1:-}" path="${2:-/}" onion
+      [ -n "$svc" ] || { echo "usage: ./lab range fetch <service> [path]"; return 1; }
+      onion="$(docker exec "$tor" sh -c "grep -E '^${svc}=' /content/onions.env | cut -d= -f2" 2>/dev/null)"
+      [ -n "$onion" ] && [ "$onion" != "pending" ] || { echo "  no published onion for '${svc}' (try: ./lab range list)"; return 1; }
+      echo "  GET http://${onion}${path}  (through the workstation's Tor)"
+      # --socks5-hostname, not --socks5: the hostname must be resolved by Tor.
+      # A .onion has no DNS answer, so a plain curl here returns nothing at all,
+      # which is where the empty-body e3b0c442 hashes came from.
+      docker exec "$ws" curl -s --max-time 40 \
+        --socks5-hostname "${LAB_SOCKS:-gateway:9050}" "http://${onion}${path}" \
+        || echo "  (fetch failed — service down or still publishing)"
+      ;;
+    compare)
+      local a="${1:-market}" b="${2:-market-mirror}" c="${3:-market-clone}" s onion body hash pgp btc
+      echo "  comparing content-hash + key material across three addresses:"
+      for s in "$a" "$b" "$c"; do
+        onion="$(docker exec "$tor" sh -c "grep -E '^${s}=' /content/onions.env | cut -d= -f2" 2>/dev/null)"
+        [ -n "$onion" ] || { printf '    %-14s (no onion — ./lab range list)\n' "$s"; continue; }
+        body="$(docker exec "$ws" curl -s --max-time 40 \
+                --socks5-hostname "${LAB_SOCKS:-gateway:9050}" "http://${onion}/" 2>/dev/null)"
+        hash="$(printf '%s' "$body" | sha256sum | cut -c1-12)"
+        pgp="$(printf '%s' "$body" | grep -oE '[0-9A-F]{14}' | head -1)"
+        btc="$(printf '%s' "$body" | grep -oE 'bc1q[a-z0-9_]+' | head -1)"
+        printf '    %-14s hash %s  pgp %s  btc %s\n' "$s" "${hash:-?}" "${pgp:-?}" "${btc:-?}"
+      done
+      echo "  identical hash at different onions -> mirror; altered pgp/btc -> clone"
+      ;;
+    *)
+      echo "usage: ./lab range {list|truth|score|seed|flap|fetch|compare} [args]"
+      echo "  list [--directory|--cross]   published services (or the directory subset / cross-network refs)"
+      echo "  truth                        the ground-truth manifest (the answer key)"
+      echo "  score <crawl.json>           score a crawl against ground truth (recall/precision/clones)"
+      echo "  seed                         regenerate the watermarked content"
+      echo "  flap <service>               simulate seizure/rebrand at a new onion   e.g. ./lab range flap leak"
+      echo "  fetch <service> [path]       fetch a service through the workstation's Tor"
+      echo "  compare <a> <b> <c>          diff content-hash + keys across addresses"
+      echo "  (bring the range up first: ./lab up range)"
+      return 1
+      ;;
+  esac
+}
+
+cmd_crawl() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local art="$LAB_ROOT/labs/artifacts/crawler"
+  local tor="darkweb-range-tor" ws="darkweb-workstation"
+  case "$sub" in
+    selftest)
+      # the crawler's brain self-tests offline — no Docker, no Tor required
+      local rc=0
+      ( cd "$art" && python3 frontier.py --selftest ) || rc=1
+      ( cd "$art" && python3 extract.py  --selftest ) || rc=1
+      ( cd "$art" && python3 crawl.py    --selftest ) || rc=1
+      [ "$rc" -eq 0 ] && echo "  crawler self-tests passed (frontier, extract, crawl+scorer)"
+      return "$rc"
+      ;;
+    range|score)
+      local naive="" mode="full engine"
+      for a in "$@"; do case "$a" in --naive) naive="--naive"; mode="naive crawl" ;; esac; done
+      local map
+      map="$(docker exec "$tor" cat /content/onions.env 2>/dev/null)" \
+        || { echo "  range not up? bring it up: ./lab up range"; return 1; }
+      # scope = every published range host; seed = the directory
+      local allow seed
+      allow="$(printf '%s\n' "$map" | awk -F= 'NF==2 && $2!="pending"{printf "http://%s/,",$2}')"
+      seed="$(printf '%s\n' "$map" | awk -F= '$1=="directory" && $2!="pending"{print "http://"$2"/"}')"
+      [ -n "$seed" ] || { echo "  the range directory has no published onion yet (try: ./lab range list)"; return 1; }
+      echo "  crawling the range through the workstation's Tor (${mode})..."
+      docker exec -e LAB_ALLOW="$allow" -e LAB_SEED="$seed" "$ws" \
+        python3 /opt/crawler/crawl_live.py --out /evidence/crawl-output.json $naive \
+        || { echo "  crawl failed (is the workstation up, and Tor reaching the range?)"; return 1; }
+      if [ "$sub" = "score" ]; then
+        echo "  scoring the crawl against the range ground truth (the Lab 8.7 harness):"
+        docker exec "$ws" python3 /opt/range-scorer/scorer.py /evidence/crawl-output.json
+      else
+        echo "  wrote crawl-output.json to the evidence volume; grade it with: ./lab crawl score"
+      fi
+      ;;
+    *)
+      echo "usage: ./lab crawl {selftest|range|score} [--naive]"
+      echo "  selftest       run the crawler's offline self-tests (frontier, extract, crawl+scorer)"
+      echo "  range          run the crawler against the range over Tor; writes crawl-output.json"
+      echo "  range --naive  a first crawl with sessions, dedup, and clone detection off"
+      echo "  score          crawl the range, then grade the result on the Lab 8.7 harness"
+      echo "  (bring the range up first: ./lab up range)"
+      return 1
+      ;;
+  esac
+}
+
+cmd_dedup() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local art="$LAB_ROOT/labs/artifacts/dedup"
+  local scorer="$LAB_ROOT/labs/artifacts/dedup-scorer"
+  case "$sub" in
+    selftest)
+      # the whole detector runs offline — no Docker, no Tor, no range required
+      local rc=0
+      ( cd "$art" && python3 shingle.py   --selftest ) || rc=1
+      ( cd "$art" && python3 structure.py --selftest ) || rc=1
+      ( cd "$art" && python3 signals.py   --selftest ) || rc=1
+      ( cd "$art" && python3 cluster.py   --selftest ) || rc=1
+      ( cd "$scorer" && python3 scorer.py --selftest ) >/dev/null 2>&1 || rc=1
+      [ "$rc" -eq 0 ] && echo "  dedup self-tests passed (shingle, structure, signals, cluster+scorer)"
+      return "$rc"
+      ;;
+    run|score)
+      local naive="" mode="full engine"
+      for a in "$@"; do case "$a" in --naive) naive="--naive"; mode="naive detector" ;; esac; done
+      if [ "$sub" = "score" ]; then
+        local out="$scorer/dedup-output.json"
+        ( cd "$art" && python3 cluster.py --dir corpus $naive --out "$out" ) \
+          || { echo "  dedup run failed"; return 1; }
+        echo "  clustered the clone-lab corpus (${mode}); grading against ground truth:"
+        python3 "$scorer/scorer.py" "$out"
+      else
+        echo "  clustering the clone-lab corpus (${mode}):"
+        ( cd "$art" && python3 cluster.py --dir corpus $naive )
+      fi
+      ;;
+    *)
+      echo "usage: ./lab dedup {selftest|run|score} [--naive]"
+      echo "  selftest   run the detector's self-tests (shingle, structure, signals, cluster+scorer)"
+      echo "  run        cluster the clone-lab corpus into mirrors and clones (prints the clustering)"
+      echo "  score      cluster, then grade on ground truth (mirror/clone recall, false merges)"
+      echo "  --naive    use only the Chapter 9 detector (exact-hash mirrors, keyed-structural clones)"
+      return 1
+      ;;
+  esac
+}
+
+cmd_market() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local art="$LAB_ROOT/labs/artifacts/market-extract"
+  local scorer="$LAB_ROOT/labs/artifacts/market-scorer"
+  case "$sub" in
+    realslice) python3 "$LAB_ROOT/labs/datasets/agora/slice.py" "$@" ;;         # Ch11: real Agora market slice
+    selftest)
+      # the whole extractor runs offline — no Docker, no Tor, no range required
+      local rc=0
+      ( cd "$art" && python3 store.py    --selftest ) || rc=1
+      ( cd "$art" && python3 listings.py --selftest ) || rc=1
+      ( cd "$art" && python3 vendors.py  --selftest ) || rc=1
+      ( cd "$art" && python3 defenses.py --selftest ) || rc=1
+      ( cd "$art" && python3 graph.py    --selftest ) || rc=1
+      ( cd "$art" && python3 pipeline.py --selftest ) || rc=1
+      ( cd "$scorer" && python3 scorer.py --selftest ) >/dev/null 2>&1 || rc=1
+      [ "$rc" -eq 0 ] && echo "  market self-tests passed (store, listings, vendors, defenses, graph, pipeline+scorer)"
+      return "$rc"
+      ;;
+    store)
+      ( cd "$art" && python3 store.py --ingest corpus )
+      ;;
+    extract)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      local mode="full pipeline"; [ -n "$naive" ] && mode="naive scraper"
+      echo "  extracting the market-lab corpus (${mode}):"
+      ( cd "$art" && python3 pipeline.py --corpus corpus --summary $naive )
+      ;;
+    defenses)
+      echo "  classifying the market's countermeasures (detect-only):"
+      ( cd "$art" && python3 defenses.py --scan corpus )
+      ;;
+    graph)
+      echo "  building the vendor/reputation graph:"
+      ( cd "$art" && python3 graph.py --corpus corpus --summary )
+      ;;
+    score)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      local mode="full pipeline"; [ -n "$naive" ] && mode="naive scraper"
+      local out="$scorer/market-output.json"
+      ( cd "$art" && python3 pipeline.py --corpus corpus $naive --out "$out" ) >/dev/null \
+        || { echo "  market extraction failed"; return 1; }
+      echo "  extracted the market-lab corpus (${mode}); grading against ground truth:"
+      python3 "$scorer/scorer.py" "$out"
+      ;;
+    *)
+      echo "usage: ./lab market {selftest|store|extract|defenses|graph|score} [--naive]"
+      echo "  selftest   run the extractor's self-tests (store, listings, vendors, defenses, graph, pipeline+scorer)"
+      echo "  store      ingest the corpus into a content-addressed store (mirror collapse + provenance)"
+      echo "  extract    parse listings/vendors + adversarial flags (summary)"
+      echo "  defenses   classify CAPTCHA/rate-limit/poisoned pages + honeypot links (detect-only)"
+      echo "  graph      build the vendor/reputation graph (prolific, rings, keys, reputation, bait)"
+      echo "  score      extract, then grade on ground truth (field recall, flags, defenses, safety)"
+      echo "  --naive    use the brittle scraper (class-only, no defense detection, no adversarial checks)"
+      return 1
+      ;;
+  esac
+}
+
+cmd_leak() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local art="$LAB_ROOT/labs/artifacts/leak-extract"
+  local store="$LAB_ROOT/labs/artifacts/market-extract"
+  local scorer="$LAB_ROOT/labs/artifacts/leak-scorer"
+  case "$sub" in
+    realsite)  python3 "$LAB_ROOT/labs/datasets/ransomwatch/sites.py" "$@" ;;    # Ch12: real leak-site channel
+    selftest)
+      # the whole extractor runs offline — no Docker, no Tor, no range required
+      local rc=0
+      ( cd "$art" && python3 victims.py     --selftest ) || rc=1
+      ( cd "$art" && python3 lifecycle.py   --selftest ) || rc=1
+      ( cd "$art" && python3 reposts.py     --selftest ) || rc=1
+      ( cd "$art" && python3 negotiation.py --selftest ) || rc=1
+      ( cd "$art" && python3 correlate.py   --selftest ) || rc=1
+      ( cd "$art" && python3 pipeline.py    --selftest ) || rc=1
+      ( cd "$scorer" && python3 scorer.py   --selftest ) >/dev/null 2>&1 || rc=1
+      [ "$rc" -eq 0 ] && echo "  leak self-tests passed (victims, lifecycle, reposts, negotiation, correlate, pipeline+scorer)"
+      return "$rc"
+      ;;
+    store)
+      ( cd "$art" && python3 "$store/store.py" --ingest corpus )
+      ;;
+    extract)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      local mode="full pipeline"; [ -n "$naive" ] && mode="naive analyst"
+      echo "  extracting the extortion-operation corpus (${mode}):"
+      ( cd "$art" && python3 pipeline.py --corpus corpus --summary $naive )
+      ;;
+    lifecycle)
+      echo "  diffing leak-site snapshots (lifecycle tells):"
+      ( cd "$art" && python3 lifecycle.py --corpus corpus --summary )
+      ;;
+    reposts)
+      echo "  matching victims reposted across sites (mirror = affiliate, clone = recycled):"
+      ( cd "$art" && python3 reposts.py --corpus corpus --summary )
+      ;;
+    negotiate)
+      local rcart="$LAB_ROOT/labs/artifacts/ransomchat"
+      if [ -n "${1:-}" ] && [ -f "$1" ]; then
+        # analyse one saved transcript — e.g. your own RansomChat session
+        python3 "$rcart/analyze.py" "$1"
+      elif [ -n "${1:-}" ]; then
+        die "no such transcript: $1"
+      else
+        echo "  parsing negotiation transcripts (arc + operator tactics):"
+        ( cd "$art" && python3 negotiation.py --corpus corpus --summary )
+      fi
+      ;;
+    correlate)
+      echo "  cross-checking public claim against private transcript (the bluff is in the gap):"
+      ( cd "$art" && python3 correlate.py --corpus corpus --summary )
+      ;;
+    score)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      local mode="full pipeline"; [ -n "$naive" ] && mode="naive analyst"
+      local out="$scorer/leak-output.json"
+      ( cd "$art" && python3 pipeline.py --corpus corpus $naive --out "$out" ) >/dev/null \
+        || { echo "  leak extraction failed"; return 1; }
+      echo "  extracted the extortion-operation corpus (${mode}); grading against ground truth:"
+      python3 "$scorer/scorer.py" "$out"
+      ;;
+    *)
+      echo "usage: ./lab leak {selftest|store|extract|lifecycle|reposts|negotiate|correlate|score} [--naive]"
+      echo "  selftest    run the extractor's self-tests (victims, lifecycle, reposts, negotiation, correlate, pipeline+scorer)"
+      echo "  store       ingest the corpus into the Chapter 11 content-addressed store"
+      echo "  extract     parse victims + lifecycle + reposts + bluffs (summary)"
+      echo "  lifecycle   diff leak-site snapshots for slid deadlines, publications, withdrawals"
+      echo "  reposts     detect victims reposted across sites (mirror = affiliate, clone = recycled)"
+      echo "  negotiate   parse negotiation transcripts into arcs + operator tactics"
+      echo "  correlate   cross-check public claim vs private transcript to flag bluffs"
+      echo "  score       extract, then grade on ground truth (field/lifecycle/repost/tactic/bluff recall)"
+      echo "  --naive     use the brittle analyst (class-only, single snapshot, money-only transcripts)"
+      return 1
+      ;;
+  esac
+}
+
+cmd_link() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local art="$LAB_ROOT/labs/artifacts/persona-extract"
+  local scorer="$LAB_ROOT/labs/artifacts/persona-scorer"
+  case "$sub" in
+    selftest)
+      # the whole linkage engine runs offline — no Docker, no Tor, no range required
+      local rc=0
+      ( cd "$art" && python3 identifiers.py --selftest ) || rc=1
+      ( cd "$art" && python3 behavior.py    --selftest ) || rc=1
+      ( cd "$art" && python3 fuse.py        --selftest ) || rc=1
+      ( cd "$art" && python3 pipeline.py    --selftest ) || rc=1
+      ( cd "$scorer" && python3 scorer.py   --selftest ) >/dev/null 2>&1 || rc=1
+      [ "$rc" -eq 0 ] && echo "  link self-tests passed (identifiers, stylometry, behavior, fuse, pipeline+scorer)"
+      return "$rc"
+      ;;
+    ledger)
+      echo "  the identifier ledger (what each persona signs, shows, and transacts with):"
+      ( cd "$art" && python3 identifiers.py --corpus corpus --summary )
+      ;;
+    hard)
+      echo "  hard-identifier links (shared signed key / wallet) + framing flags:"
+      ( cd "$art" && python3 identifiers.py --corpus corpus --links )
+      ;;
+    style)
+      echo "  stylometric similarity (writing voice; higher = closer):"
+      ( cd "$art" && python3 stylometry.py --corpus corpus --matrix )
+      ;;
+    behavior)
+      echo "  behavioural links (rhythm, handle transform, tactic sequence):"
+      ( cd "$art" && python3 behavior.py --corpus corpus --summary )
+      ;;
+    fuse)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      local mode="full linkage"; [ -n "$naive" ] && mode="naive linker"
+      echo "  fusing signals into operators (${mode}):"
+      ( cd "$art" && python3 fuse.py --corpus corpus --summary $naive )
+      ;;
+    score)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      local mode="full linkage"; [ -n "$naive" ] && mode="naive linker"
+      local out="$scorer/linkage-output.json"
+      ( cd "$art" && python3 pipeline.py --corpus corpus $naive --out "$out" ) >/dev/null \
+        || { echo "  linkage failed"; return 1; }
+      echo "  linked the persona corpus (${mode}); grading against ground truth:"
+      python3 "$scorer/scorer.py" "$out"
+      ;;
+    *)
+      echo "usage: ./lab link {selftest|ledger|hard|style|behavior|fuse|score} [--naive]"
+      echo "  selftest    run the linkage engine's self-tests (identifiers, stylometry, behavior, fuse, pipeline+scorer)"
+      echo "  ledger      the identifier ledger — what each persona signs, shows, and transacts with"
+      echo "  hard        hard-identifier links (shared signed key / wallet) and borrowed-key framing flags"
+      echo "  style       stylometric similarity matrix (writing voice)"
+      echo "  behavior    behavioural links (activity rhythm, handle transformation, tactic sequence)"
+      echo "  fuse        fuse all signals into operator clusters with confidence"
+      echo "  score       link, then grade on ground truth (recall/precision/false-merges/calibration)"
+      echo "  --naive     use the naive linker (merges on any shared identifier or a look-alike handle)"
+      return 1
+      ;;
+  esac
+}
+
+cmd_detect() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local art="$LAB_ROOT/labs/artifacts/detect-monitor"
+  local scorer="$LAB_ROOT/labs/artifacts/detect-scorer"
+  case "$sub" in
+    realfeed)  python3 "$LAB_ROOT/labs/datasets/ransomwatch/monitor.py" "$@" ;;   # Ch14: real ransomwatch change-feed
+    selftest)
+      # the whole detection engine runs offline — no Docker, no Tor, no range required
+      local rc=0
+      ( cd "$art" && python3 changefeed.py --selftest ) || rc=1
+      ( cd "$art" && python3 watchlist.py  --selftest ) || rc=1
+      ( cd "$art" && python3 classify.py   --selftest ) || rc=1
+      ( cd "$art" && python3 score.py      --selftest ) || rc=1
+      ( cd "$art" && python3 correlate.py  --selftest ) || rc=1
+      ( cd "$art" && python3 pipeline.py   --selftest ) || rc=1
+      ( cd "$scorer" && python3 scorer.py  --selftest ) >/dev/null 2>&1 || rc=1
+      [ "$rc" -eq 0 ] && echo "  detect self-tests passed (changefeed, watchlist, classify, score, correlate, pipeline+scorer)"
+      return "$rc"
+      ;;
+    watchlist)
+      echo "  the watchlist — the operators this monitor watches (from Chapter 13's high-confidence clusters):"
+      ( cd "$art" && python3 watchlist.py --summary )
+      ;;
+    feed)
+      echo "  the raw change feed (every difference between consecutive snapshots, before judgement):"
+      ( cd "$art" && python3 changefeed.py --corpus corpus --summary )
+      ;;
+    classify)
+      echo "  each raw change typed into the dark-web taxonomy:"
+      ( cd "$art" && python3 classify.py --corpus corpus --summary )
+      ;;
+    score)
+      echo "  every change scored by severity (watched operators boosted; churn suppressed):"
+      ( cd "$art" && python3 score.py --corpus corpus --summary )
+      ;;
+    correlate)
+      echo "  collapsing cross-surface duplicates (a victim mirrored across two onions is one alert):"
+      ( cd "$art" && python3 correlate.py --corpus corpus --summary )
+      ;;
+    monitor)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      local mode="full monitor"; [ -n "$naive" ] && mode="naive monitor"
+      echo "  running the watch loop (${mode}) — the alert stream an analyst reads:"
+      ( cd "$art" && python3 pipeline.py --corpus corpus $naive --summary )
+      ;;
+    grade)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      local mode="full monitor"; [ -n "$naive" ] && mode="naive monitor"
+      local out="$scorer/alerts-output.json"
+      ( cd "$art" && python3 pipeline.py --corpus corpus $naive --out "$out" ) >/dev/null \
+        || { echo "  monitoring failed"; return 1; }
+      echo "  ran the monitor (${mode}); grading the alert stream against ground truth:"
+      python3 "$scorer/scorer.py" "$out"
+      ;;
+    *)
+      echo "usage: ./lab detect {selftest|watchlist|feed|classify|score|correlate|monitor|grade} [--naive]"
+      echo "  selftest    run the detection engine's self-tests (changefeed, watchlist, classify, score, correlate, pipeline+scorer)"
+      echo "  watchlist   the operators this monitor watches (built from Chapter 13's high-confidence clusters)"
+      echo "  feed        the raw change feed — every diff between consecutive snapshots"
+      echo "  classify    each raw change typed into the dark-web taxonomy"
+      echo "  score       every change scored by severity (watched operators boosted, churn suppressed)"
+      echo "  correlate   collapse cross-surface duplicates into one canonical alert"
+      echo "  monitor     run the full watch loop and print the ranked alert stream"
+      echo "  grade       run the monitor, then grade the alert stream on ground truth (recall/precision/false-alerts/criticals)"
+      echo "  --naive     use the naive monitor (alerts on every raw diff; no scoring, dedup, or suppression)"
+      return 1
+      ;;
+  esac
+}
+
+cmd_capstone() {
+  local sub="${1:-}"; [ "$#" -gt 0 ] && shift
+  local art="$LAB_ROOT/labs/artifacts/report-forge"
+  local scorer="$LAB_ROOT/labs/artifacts/report-scorer"
+  case "$sub" in
+    selftest)
+      # the whole capstone runs offline — it RUNS the Ch11-14 engines and consumes their output
+      local rc=0
+      ( cd "$art" && python3 evidence.py --selftest ) || rc=1
+      ( cd "$art" && python3 claims.py   --selftest ) || rc=1
+      ( cd "$art" && python3 report.py   --selftest ) || rc=1
+      ( cd "$art" && python3 pipeline.py --selftest ) || rc=1
+      ( cd "$scorer" && python3 scorer.py --selftest ) >/dev/null 2>&1 || rc=1
+      [ "$rc" -eq 0 ] && echo "  capstone self-tests passed (evidence, claims, report, pipeline+scorer)"
+      return "$rc"
+      ;;
+    evidence)
+      echo "  chaining the four engines into one evidence graph for the target operator:"
+      ( cd "$art" && python3 evidence.py --summary )
+      ;;
+    claims)
+      echo "  the evidence turned into claims, each with provenance, type, and a calibrated confidence:"
+      ( cd "$art" && python3 claims.py --summary )
+      ;;
+    report)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      ( cd "$art" && python3 report.py $naive )
+      ;;
+    grade)
+      local naive=""; for a in "$@"; do [ "$a" = "--naive" ] && naive="--naive"; done
+      local mode="full report"; [ -n "$naive" ] && mode="naive report"
+      local out="$scorer/report-output.json"
+      ( cd "$art" && python3 pipeline.py $naive --out "$out" ) >/dev/null \
+        || { echo "  report assembly failed"; return 1; }
+      echo "  assembled the ${mode}; grading it against the ground-truth claim set:"
+      python3 "$scorer/scorer.py" "$out"
+      ;;
+    *)
+      echo "usage: ./lab capstone {selftest|evidence|claims|report|grade} [--naive]"
+      echo "  selftest    run the capstone's self-tests (evidence, claims, report, pipeline+scorer)"
+      echo "  evidence    chain the Ch11-14 engines into one evidence graph for the target operator"
+      echo "  claims      the evidence turned into claims with provenance, type, and calibrated confidence"
+      echo "  report      assemble and print the intelligence brief"
+      echo "  grade       assemble the report, then grade it (coverage/provenance/calibration/overclaims)"
+      echo "  --naive     use the naive assembler (flattens every claim to sourceless high-confidence fact)"
+      return 1
+      ;;
+  esac
+}
+
+# report — build the visual intelligence suite from the book's analyses. The
+# Python runs here on the host (offline, over the committed DBs); it writes a
+# folder of self-contained HTML pages plus an index into intel/, which compose
+# mounts read-only at /intel inside the workstation. Open file:///intel/index.html
+# in the workstation browser. Every page is network-free, so it renders even
+# though the workstation routes through Tor, and the mount is read-only, so the
+# collection tier can view the intelligence but never alter it.
+cmd_report() {
+  local sub="${1:-all}"; [ "$#" -gt 0 ] && shift
+  local rp="$LAB_ROOT/labs/artifacts/report-viz/report.py"
+  case "$sub" in
+    selftest) python3 "$rp" --selftest ;;
+    all|suite)
+      local dir="$LAB_ROOT/intel"; mkdir -p "$dir"
+      python3 "$rp" --all --outdir "$dir" || return 1
+      echo "  wrote the visual intelligence suite to intel/"
+      if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^darkweb-workstation$'; then
+        echo "  the workstation mounts it read-only — open  file:///intel/index.html  in its browser"
+      else
+        echo "  start the workstation with ./lab up (it mounts intel/ read-only), then open  file:///intel/index.html  inside"
+        echo "  (first run after upgrading, ./lab up recreates the workstation to pick up the mount; or open $dir/index.html on the host)"
+      fi
+      ;;
+    *) echo "usage: ./lab report [all|selftest]"; return 1 ;;
+  esac
+}
+
+# ── dispatch ──────────────────────────────────────────────────────────────────
+
+usage() {
+  cat <<'USAGE'
+lab — Unlock the Secrets of the DARK WEB, Volume 2
+
+  ./lab selftest        check the repo files agree with each other
+  ./lab rebuild [stack] rebuild images ignoring cache (after editing branding)
+  ./lab doctor          preflight check; writes ~/evidence/preflight.json
+  ./lab fix-ipv6        stop Docker dialing IPv6 (WSL2 pull failures)
+  ./lab pin-registry    force IPv4 for Docker Hub via /etc/hosts
+  ./lab unpin-registry  undo the above
+  ./lab load-images     import base images from a tar bundle, for offline use
+  ./lab list            available lab stacks
+  ./lab up <stack>      start a stack           (default: base)
+  ./lab logs [service]  service logs plus recent healthcheck output
+  ./lab down [stack]    stop+remove containers (i2p|hyphanet|range|overlays|all; --volumes drops vols)
+  ./lab stop [stack]    stop containers, keep them (./lab up resumes; ./lab down removes)
+  ./lab reset <stack>   discard scratch, keep evidence
+  ./lab check <id>      grade a lab             e.g. ./lab check 1.1
+  ./lab ps              show all running lab containers (any profile)
+  ./lab i2p <cmd> <r>   I2P testnet helpers     (console|netdb|tunnels|fetch)
+  ./lab fn <cmd> <n>    Hyphanet testnet helpers (console|insert|fetch|peers)
+  ./lab range <cmd>     simulated darknet range (list|truth|score|flap|fetch|compare)
+  ./lab crawl <cmd>     run the Chapter 9 crawler (selftest|range|score [--naive])
+  ./lab dedup <cmd>     run the Chapter 10 mirror/clone detector (selftest|run|score [--naive])
+  ./lab market <cmd>    run the Chapter 11 market extractor (selftest|store|extract|defenses|graph|score)
+  ./lab leak <cmd>      run the Chapter 12 leak/negotiation extractor (selftest|store|extract|lifecycle|reposts|negotiate|correlate|score)
+  ./lab link <cmd>      run the Chapter 13 persona-linkage engine (selftest|ledger|hard|style|behavior|fuse|score)
+  ./lab detect <cmd>    run the Chapter 14 detection engine (selftest|watchlist|feed|classify|score|correlate|monitor|grade)
+  ./lab capstone <cmd>  run the Chapter 15 capstone report (selftest|evidence|claims|report|grade)
+  ./lab report [area]   build the visual HTML dashboard and share it into the workstation (all|negotiations|leaksite|changefeed|market)
+  ./lab update          re-fetch the real-data snapshots from GitHub and re-stamp the capture date
+  ./lab open            print / open the desktop URL
+  ./lab creds           show desktop credentials
+  ./lab rotate-creds    replace the desktop password
+
+Start with:  ./lab doctor
+USAGE
+}
+
+cmd_update() {
+  # Refresh the real-data snapshots from their public GitHub sources and re-stamp the
+  # capture date. Ch12/Ch14 draw on the live ransomwatch feed; Ch11's Agora slice is a
+  # fixed archive. See the note in each real-data lab for the run/compare/update workflow.
+  python3 "$LAB_ROOT/labs/datasets/update.py" "$@"
+}
+
+case "${1:-}" in
+  doctor)      shift; cmd_doctor "$@" ;;
+  fix-ipv6)    shift; cmd_fix_ipv6 "$@" ;;
+  load-images) shift; cmd_load_images "$@" ;;
+  pin-registry)   shift; cmd_pin_registry "$@" ;;
+  unpin-registry) shift; cmd_unpin_registry "$@" ;;
+  list)        shift; cmd_list   "$@" ;;
+  selftest)    shift; cmd_selftest "$@" ;;
+  rebuild)     shift; cmd_rebuild  "$@" ;;
+  logs)        shift; cmd_logs   "$@" ;;
+  up)          shift; cmd_up     "$@" ;;
+  down)        shift; cmd_down   "$@" ;;
+  stop)        shift; cmd_stop   "$@" ;;
+  reset)       shift; cmd_reset  "$@" ;;
+  check)       shift; cmd_check  "$@" ;;
+  ci)          shift; cmd_ci     "$@" ;;
+  booktest)    shift; cmd_booktest "$@" ;;
+  ps)          shift; cmd_ps     "$@" ;;
+  i2p)         shift; cmd_i2p    "$@" ;;
+  fn|hyphanet) shift; cmd_fn     "$@" ;;
+  range)       shift; cmd_range  "$@" ;;
+  crawl)       shift; cmd_crawl  "$@" ;;
+  dedup)       shift; cmd_dedup  "$@" ;;
+  market)      shift; cmd_market "$@" ;;
+  leak)        shift; cmd_leak   "$@" ;;
+  link)        shift; cmd_link   "$@" ;;
+  detect)      shift; cmd_detect "$@" ;;
+  capstone)    shift; cmd_capstone "$@" ;;
+  report)      shift; cmd_report "$@" ;;
+  update)      shift; cmd_update "$@" ;;
+  ransomchat)  shift; cmd_ransomchat "$@" ;;
+  open)        shift; cmd_open   "$@" ;;
+  creds)       shift; cmd_creds  "$@" ;;
+  rotate-creds) shift; cmd_rotate_creds "$@" ;;
+  ""|-h|--help|help) usage ;;
+  *)           printf 'unknown command: %s\n\n' "$1"; usage; exit 1 ;;
+esac

@@ -1,0 +1,10 @@
+=== SYNTHETIC LAB DATA — persona profile ===
+persona: BlackVault
+surface: leak
+displayed_keys: F19B7A0C4E82D5613FA0
+signed_keys: F19B7A0C4E82D5613FA0
+wallets: bc1qsynth0laba0000000000000000000000zzzz
+active_hours: 22,23,0,1,2,23,0,22,1,0
+tactics: deadline_pressure,threat_leak,proof_offered,deletion_promise
+--- posts ---
+We have moved brands; the terms have not. Moreover the same guarantees apply, hence prior clients need not worry. Whilst the name is new, our word remains; it shall be kept. We publish only when forced; moreover we prefer settlement, hence the channel stays open.

@@ -1,0 +1,23 @@
+=== SYNTHETIC LAB DATA — monitoring snapshot ===
+snapshot: t3
+--- victims ---
+Meridian | site=RedLattice | status=published | deadline=- | claimed_gb=50
+Coastal | site=RedLattice | status=teased | deadline=2026-08-09 | claimed_gb=80
+Meridian | site=RedLattice-m1 | status=published | deadline=- | claimed_gb=50
+Coastal | site=RedLattice-m1 | status=teased | deadline=2026-08-09 | claimed_gb=80
+--- sites ---
+RedLattice | kind=leak | state=up | content_id=rl-idx-3 | operator=NightHawk
+NightHawkMkt | kind=market | state=down | content_id=nh-idx-1 | operator=NightHawk
+SaltMineMkt | kind=market | state=up | content_id=sm-idx-1 | operator=SaltMine
+--- mirrors ---
+RedLattice-m1 | of=RedLattice | onion=redlat2onion | content_id=rl-idx-3
+--- clones ---
+NightHawkMkt-x | of=NightHawkMkt | onion=nhmktxonion | signed_key=CC00FF11DD22AA334455 | wallet=bc1qclone000000000000000000000000000xxxx
+--- personas ---
+n1ghthawk2 | surface=forum | signed_key=F19B7A0C4E82D5613FA0 | wallet=-
+--- pages ---
+churn-1 | content_id=pg-1 | banner=C
+churn-2 | content_id=pg-2 | banner=C
+churn-3 | content_id=pg-3 | banner=C
+churn-4 | content_id=pg-4 | banner=C
+churn-5 | content_id=pg-5 | banner=C

@@ -1,0 +1,52 @@
+# Rendered from this template by entrypoint.sh, which substitutes __GATEWAY_IP__
+# with the address compose assigns to the gateway on the internal bridge.
+#
+# Why bind to that one address and not 0.0.0.0: this container now has an
+# interface on the external bridge that reaches the internet. Ports bound to
+# 0.0.0.0 would listen there too. Nothing outside the stack can reach them
+# (they are never published, and only the gateway sits on the external bridge),
+# but a proxy on a dark-web lab should listen on exactly the interface that is
+# meant to reach it — here, the internal one — and nowhere else.
+#
+# The lab needs three ports beyond the stock SOCKS proxy, so traffic can be
+# forced through Tor without each application cooperating:
+#
+#   SocksPort   what Tor Browser and proxychains connect to explicitly
+#   TransPort   transparent proxy, for TCP the firewall redirects here
+#   DNSPort     resolver, so name lookups also go through Tor
+
+SocksPort   __GATEWAY_IP__:9050
+DNSPort     __GATEWAY_IP__:5353
+TransPort   __GATEWAY_IP__:9040
+
+# Make .onion (and .exit) reachable through the transparent path. A .onion name
+# has no routable IP, so Tor's resolver maps these suffixes to virtual addresses
+# in the range below; a connection to one of those addresses is redirected to
+# the TransPort, which recognises it and performs the rendezvous. Without this,
+# clearnet works but every onion address fails to resolve — the connection dies
+# before it starts. The range is chosen to avoid the lab's own 10.152.x subnets.
+AutomapHostsOnResolve 1
+AutomapHostsSuffixes .onion,.exit
+VirtualAddrNetworkIPv4 10.192.0.0/10
+
+# Control port on the internal interface, so the workstation's apps can reach
+# it — Tor Browser to monitor bootstrap and request new circuits, OnionShare to
+# publish onion services. They are separate containers now and cannot see this
+# container's loopback, which is why it moved off 127.0.0.1. Authentication is a
+# hashed password, not a cookie: a cookie would have to be read from a file
+# inside this container, which the workstation cannot open. entrypoint.sh fills
+# in the auth line below from the shared secret (falling back to cookie auth,
+# local only, if none was provided).
+ControlPort __GATEWAY_IP__:9051
+__CONTROL_AUTH__
+
+# Drop to the unprivileged tor user after binding. The entrypoint installs the
+# firewall as root before starting tor, so tor itself needs no privilege.
+User tor
+
+DataDirectory /var/lib/tor
+Log notice stdout
+
+# No HiddenServiceDir here. Tor refuses to start if one is declared without at
+# least one HiddenServicePort, and that failure presents as a container that
+# never becomes healthy. Part II adds services as drop-ins.

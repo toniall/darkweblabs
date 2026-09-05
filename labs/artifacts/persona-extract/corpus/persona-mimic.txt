@@ -1,0 +1,10 @@
+=== SYNTHETIC LAB DATA — persona profile ===
+persona: Mimic
+surface: market
+displayed_keys: F19B7A0C4E82D5613FA0
+signed_keys: CC11DD22EE33FF445566
+wallets: bc1qsynth0charlie00000000000000000000cccc
+active_hours: 9,10,11,9,10,9,11,10,9,10
+tactics: 
+--- posts ---
+Please be advised that all orders are processed in strict sequence. Kindly submit payment at your earliest convenience. Your patronage is valued and will be duly acknowledged. Cooperation is respectfully requested and any delay is regretted.

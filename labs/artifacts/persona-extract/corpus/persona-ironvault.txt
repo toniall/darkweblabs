@@ -1,0 +1,10 @@
+=== SYNTHETIC LAB DATA — persona profile ===
+persona: IronVault
+surface: leak
+displayed_keys: 0F1E2D3C4B5A69788796
+signed_keys: 0F1E2D3C4B5A69788796
+wallets: bc1qsynth0bravo2000000000000000000000vvvv
+active_hours: 14,15,16,13,14,15,16,14,15,13
+tactics: threat_sell,deadline_pressure
+--- posts ---
+ok look, u got the data locked up. just pay and its gone, thats the deal. gonna give u till friday, no more. real simple, u pay we walk. dont make this harder than it is, just sort it out.

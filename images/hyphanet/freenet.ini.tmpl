@@ -1,0 +1,31 @@
+## Hyphanet node config (Chapter 7), rendered from env by entrypoint.sh.
+## A closed DARKNET testnet: opennet off, friends added by hand from the shared
+## seed. Hyphanet generates much more config on first run — this is the seed of
+## it, and the security level is what pins the node to darknet/friends-only.
+
+## darknet only — never contact opennet seednodes or strangers
+node.opennet.enabled=false
+security-levels.networkThreatLevel=HIGH
+security-levels.physicalThreatLevel=NORMAL
+
+## FProxy — the node's web UI. Bound wide so the container port is reachable
+## in-lab (the network is internal-only, so this is not exposed to the clearnet).
+fproxy.enabled=true
+fproxy.port=8888
+fproxy.bindTo=0.0.0.0
+fproxy.allowedHosts=*
+fproxy.allowedHostsFullAccess=*
+
+## FCP — the client protocol used to script insert/retrieve (Lab 7.2 / Part III).
+fcp.enabled=true
+fcp.port=9481
+fcp.bindTo=0.0.0.0
+fcp.allowedHosts=*
+
+## datastore: fixed size; least-recently-requested blocks are evicted when full
+## (the "forgetful store" of Lab 7.5)
+node.storeSize=@STORE@
+node.storeType=salt-hash
+
+## keep the node from trying to be internet-reachable in the lab
+node.load.threadLimit=500

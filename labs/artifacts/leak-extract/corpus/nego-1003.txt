@@ -1,0 +1,12 @@
+=== SYNTHETIC LAB DATA — negotiation transcript ===
+victim: Coastal Credit Union
+brand: RedLattice
+key: F19B7A0C4E82D5613FA0
+wallet: bc1qsynth0laba0000000000000000000000zzzz
+
+[2026-07-15 10:00] operator: We have 80GB. 100 BTC before we publish.
+[2026-07-16 09:00] victim: Prove it and we will talk.
+[2026-07-16 12:00] operator: proof: we decrypted one loan file, see attached.
+[2026-07-22 10:00] operator: Final price 40 BTC. Pay and we will delete all data, you have our word.
+[2026-07-24 11:00] victim: Paid.
+[settlement] 40 BTC — settled

@@ -1,0 +1,10 @@
+=== SYNTHETIC LAB DATA — persona profile ===
+persona: SaltMine
+surface: market
+displayed_keys: A1B2C3D4E5F60718293A
+signed_keys: A1B2C3D4E5F60718293A
+wallets: bc1qsynth0bravo1000000000000000000000wwww
+active_hours: 13,14,15,16,14,15,13,16,17,14
+tactics: 
+--- posts ---
+ok so heres how it works. u pay first, then i ship, thats it. just being real, no games here. gonna keep prices low so u come back. u got questions just ask, i dont bite. thats the whole deal honestly.

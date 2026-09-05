@@ -1,0 +1,75 @@
+## i2pd testnet router config (Chapter 6). Rendered from env by entrypoint.sh.
+## These are real i2pd options; converging a CLOSED testnet is the fragile part —
+## see the chapter and validate with `./lab check 6.1`.
+
+## Custom network id. This is what isolates the testnet from the live I2P
+## network (which is netid 2): routers with a different netid will not peer.
+netid = @NETID@
+
+## Every router routes for others; floodfills (ff1/ff2) additionally hold the
+## NetDB — the distributed database of routerInfos and leaseSets.
+floodfill = @FLOODFILL@
+
+## Share a high bandwidth tier so floodfills and transit tunnels behave.
+bandwidth = P
+
+## We sit on a known internal Docker network, not behind a NAT we must probe.
+ipv4 = true
+ipv6 = false
+nat = false
+
+## Publish the container's real eth0 address. This is the difference between a
+## reseed that "works" and a NetDB that fills. Left to auto-detect, a minted
+## routerInfo often carries no usable NTCP2/SSU2 address at all, and a peer that
+## advertises no address is a peer nobody can dial: the RI is imported and then
+## dropped, the reseed logs look clean, and `known routers` sits at 0 forever.
+host = @HOST@
+
+## i2pd blacklists RFC1918 ranges by default, because on the live network a
+## router advertising 10.x is either misconfigured or lying. Here every router
+## IS on 10.152.154.x by construction, so the default silently rejects every
+## peer in the testnet. This is the second half of the empty-NetDB problem.
+[limits]
+reservedrange = false
+
+## Reseed lines are the thing you actually need to read when this misbehaves.
+[log]
+loglevel = info
+
+## Router web console. Bound wide so the container's 7070 is reachable in-lab
+## (the network is internal-only, so this is not exposed to the clearnet).
+[http]
+enabled = true
+address = 0.0.0.0
+port = 7070
+## i2pd validates the Host header against the console's configured address. With
+## address = 0.0.0.0 that means a request carrying `Host: 127.0.0.1:7070` — which
+## is what wget and curl send by default, and what `./lab check 6.1` sends — is
+## answered with 403, even though the console is up and serving. Naming the
+## hostnames we actually reach it by keeps the strict check on and lets the lab
+## (and the compose healthcheck) talk to it.
+hostname = 127.0.0.1
+## Belt and braces: the hostname above should satisfy the check, but the exact
+## comparison (with or without the :7070 suffix) varies between i2pd releases,
+## and a lab that cannot reach its own console is worse than one that skips a
+## header check on an internal-only network. Turn strictheaders back on if you
+## want to demonstrate the check itself.
+strictheaders = false
+
+## Closed-testnet bootstrap: reseed ONLY from the shared bundle the routers build
+## among themselves in /seed. There are no live reseed servers reachable here (the
+## network has no route out), and verification is off because these routerInfos
+## are unsigned by any reseed operator — they are simply our own routers.
+[reseed]
+verify = false
+zipfile = @ZIPFILE@
+
+## HTTP proxy for fetching eepsites from inside a router (Lab 6.4). Default port.
+[httpproxy]
+enabled = true
+address = 127.0.0.1
+port = 4444
+
+## SAM bridge — handy for scripting the router in Part III; off by default here.
+[sam]
+enabled = false

@@ -1,0 +1,18 @@
+{
+  "name": "detect-monitor",
+  "chapter": 14,
+  "summary": "The Chapter 14 detection engine: diff a timeline of monitoring snapshots into a change feed, classify each change, score it against the Chapter 13 watchlist, correlate away cross-surface duplicates, suppress noise, and rank the alerts an analyst reads — graded by the detect scorer. The synthesis chapter of Part IV.",
+  "modules": {
+    "changefeed.py": "Parses snapshots and diffs consecutive pairs into a raw change feed; uses Ch10 content identity to tell a real change from a re-render (banner flip with stable content_id = churn).",
+    "watchlist.py": "Builds the watchlist from Ch13's HIGH-confidence operators (members + signed keys + wallets); reuses Ch13 fuse outright.",
+    "classify.py": "Types each raw change into a dark-web taxonomy: new_victim / publication / withdrawal / deadline_slip / market_down / new_mirror / new_clone / operator_resurface / cosmetic_churn.",
+    "score.py": "Assigns severity (critical..suppress) + confidence; a change to a watched operator's own infrastructure is boosted.",
+    "correlate.py": "Collapses cross-surface duplicates (a victim on a leak site and its byte-identical mirror) into one canonical alert; echoes Ch12 correlate + Ch10 content identity.",
+    "pipeline.py": "Runs the watch loop (feed->classify->score->correlate->suppress->rank); --selftest grades naive-vs-full with the detect scorer."
+  },
+  "corpus": "corpus/ — the detect lab: 3 monitoring snapshots (t1->t2->t3) of leak victims, markets, mirrors, clones, personas, and a flood of cosmetic churn pages. Engineered so every event type and both CRITICAL events (new_clone impersonation, operator_resurface) have ground truth, buried under churn + mirror duplicates. Watermarked synthetic.",
+  "selftests": ["changefeed.py --selftest", "watchlist.py --selftest", "classify.py --selftest", "score.py --selftest", "correlate.py --selftest", "pipeline.py --selftest"],
+  "reuses": "../persona-extract/fuse.py + identifiers.py (Ch13 -> the watchlist), Ch12 lifecycle-diff pattern, Ch10 content identity + union-find lineage. Watchlist key F19B7A0C4E82D5613FA0 is the Ch12/13 operator tell, so the resurfacing persona links to the Ch13 Alpha cluster.",
+  "consumed_by": "../detect-scorer/scorer.py (alert recall/precision, false_alerts, criticals surfaced, churn suppressed, duplicates collapsed)",
+  "guardrail": "Detection WATCHES, it does not act. The engine emits alerts for defenders / incident response / victims and has no takedown, contact, or hack-back capability by construction (like Ch9 scope guard, Ch11 detect-only). Monitors the synthetic range only; preserves Ch13's pseudonym->pseudonym boundary."
+}

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<!-- Unlock the Secrets of the DARK WEB, Volume 2 | Antonio Brandao, Author | August 2026 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support Chat — RansomChat (training)</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#161c2b; --edge:#26304a; --op:#1e2740; --me:#2b6cb0;
+    --ink:#e8ecf5; --mut:#93a0bd; --accent:#4fd1c5; --warn:#f6ad55; --danger:#fc8181;
+    --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);
+       display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
+  .widget{width:100%;max-width:720px;height:min(88vh,860px);background:var(--panel);
+          border:1px solid var(--edge);border-radius:14px;display:flex;flex-direction:column;
+          overflow:hidden;box-shadow:0 24px 60px -30px #000}
+  /* header */
+  .hd{display:flex;align-items:center;gap:12px;padding:14px 16px;background:#131a29;border-bottom:1px solid var(--edge)}
+  .hd .dot{width:9px;height:9px;border-radius:50%;background:#48bb78;box-shadow:0 0 10px #48bb78}
+  .hd .t{font-weight:700;font-size:15px}
+  .hd .s{font-size:11px;color:var(--mut)}
+  .hd .sp{flex:1}
+  select{background:#0f1420;color:var(--ink);border:1px solid var(--edge);border-radius:8px;
+         padding:6px 8px;font-size:12px;font-family:var(--font)}
+  /* training banner */
+  .banner{background:rgba(246,173,85,.12);border-bottom:1px solid rgba(246,173,85,.35);
+          color:var(--warn);font-size:11.5px;padding:8px 16px;line-height:1.45}
+  /* messages */
+  .msgs{flex:1;overflow-y:auto;padding:18px 16px;display:flex;flex-direction:column;gap:10px}
+  .row{display:flex}
+  .row.me{justify-content:flex-end}
+  .bub{max-width:78%;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
+  .row.op .bub{background:var(--op);border:1px solid var(--edge);border-top-left-radius:4px}
+  .row.me .bub{background:var(--me);border-top-right-radius:4px}
+  .who{font-size:10px;color:var(--mut);margin:0 4px 3px}
+  .typing{color:var(--mut);font-size:12px;font-style:italic;padding:0 4px}
+  /* input */
+  .foot{border-top:1px solid var(--edge);padding:12px;display:flex;gap:8px;background:#131a29}
+  textarea{flex:1;resize:none;height:44px;background:#0f1420;color:var(--ink);border:1px solid var(--edge);
+           border-radius:10px;padding:11px 12px;font-size:14px;font-family:var(--font)}
+  button{background:var(--me);color:#fff;border:0;border-radius:10px;padding:0 16px;font-size:14px;
+         font-weight:600;cursor:pointer;font-family:var(--font)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.ghost{background:transparent;border:1px solid var(--edge);color:var(--mut);font-weight:500}
+  .bar{display:flex;gap:8px;padding:0 12px 12px;background:#131a29}
+  .note{color:var(--mut);font-size:11px;padding:2px 4px}
+  code{background:#0f1420;border:1px solid var(--edge);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--accent)}
+  .guard{color:var(--warn);font-size:10.5px;margin:-4px 4px 2px;opacity:.85}
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="hd">
+    <span class="dot"></span>
+    <div>
+      <div class="t"><span id="gname">Akira</span> Support</div>
+      <div class="s" id="facts">an agent is online — average reply under a minute</div>
+    </div>
+    <span class="sp"></span>
+    <select id="group" title="Ransomware group"></select>
+    <select id="backend" title="AI backend">
+      <option value="ollama">Local (Ollama)</option>
+      <option value="openai">OpenAI API</option>
+      <option value="grok">xAI Grok API</option>
+    </select>
+  </div>
+
+  <div class="banner">
+    <strong>Training simulator.</strong> You are the victim's negotiator. The "operator" is an AI
+    playing a ransomware group, seeded from the public Casualtek corpus, for learning to recognise
+    extortion tactics. It is confined to negotiation role-play. Nothing here is real.
+  </div>
+
+  <div class="msgs" id="msgs"></div>
+
+  <div class="bar">
+    <button class="ghost" id="reset">↺ Restart</button>
+    <span class="sp" style="flex:1"></span>
+    <button class="ghost" id="save">⤓ Save &amp; download transcript</button>
+  </div>
+  <div class="note" id="savenote"></div>
+
+  <div class="foot">
+    <textarea id="inp" placeholder="Type your reply to the operator…"></textarea>
+    <button id="send">Send</button>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+// The browser holds a session id and a display copy of the turns. The
+// negotiation's facts (group, opening demand, floor, deadline) live server-side
+// and never change for the life of the session — that is what keeps a saved
+// transcript analysable by ./lab leak negotiate.
+let sid = null, view = [], group = "Akira", backend = "ollama", busy = false;
+
+async function loadGroups(){
+  try{
+    const gs = await (await fetch("/api/groups")).json();
+    const sel = $("#group"); sel.innerHTML = "";
+    gs.forEach(g => { const o=document.createElement("option"); o.value=g.name;
+      o.textContent = `${g.name} (${g.transcripts} chats)`; sel.appendChild(o); });
+    group = gs[0]?.name || "Akira";
+    sel.value = group;
+  }catch(e){ /* DB not reachable yet */ }
+  $("#gname").textContent = group;
+}
+function bubble(party, content){
+  const row=document.createElement("div"); row.className="row "+(party==="operator"?"op":"me");
+  const wrap=document.createElement("div");
+  const who=document.createElement("div"); who.className="who";
+  who.textContent = party==="operator" ? group+" support" : "you";
+  const b=document.createElement("div"); b.className="bub"; b.textContent=content;
+  wrap.appendChild(who); wrap.appendChild(b); row.appendChild(wrap);
+  $("#msgs").appendChild(row); $("#msgs").scrollTop = $("#msgs").scrollHeight;
+}
+function guardNote(list){
+  if(!list || !list.length) return;
+  const d=document.createElement("div"); d.className="guard";
+  d.textContent = "consistency guard: " + list.join("; ");
+  $("#msgs").appendChild(d); $("#msgs").scrollTop = $("#msgs").scrollHeight;
+}
+function typing(on){
+  let t=$("#typing");
+  if(on){ if(!t){ t=document.createElement("div"); t.id="typing"; t.className="typing";
+    t.textContent=group+" is typing…"; $("#msgs").appendChild(t); $("#msgs").scrollTop=$("#msgs").scrollHeight; } }
+  else if(t){ t.remove(); }
+}
+function lock(on){ busy=on; $("#send").disabled=on; }
+
+async function startChat(){
+  $("#msgs").innerHTML=""; view=[]; sid=null; $("#gname").textContent=group; $("#savenote").textContent="";
+  lock(true); typing(true);
+  try{
+    const r = await (await fetch("/api/session",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({group, backend})})).json();
+    typing(false);
+    if(r.error){ bubble("operator","[backend error] "+r.error); }
+    else{
+      sid = r.session_id;
+      $("#facts").textContent = `case open · ${r.data_gb} GB held · opening demand $${r.anchor_usd.toLocaleString()} · ${r.deadline_days}-day deadline`;
+      view.push({party:"operator", content:r.opening}); bubble("operator", r.opening);
+    }
+  }catch(e){ typing(false); bubble("operator","[network error] "+e); }
+  lock(false);
+}
+async function send(){
+  const inp=$("#inp"); const text=inp.value.trim();
+  if(!text || busy) return;
+  if(!sid){ await startChat(); if(!sid) return; }
+  inp.value=""; lock(true);
+  view.push({party:"victim", content:text}); bubble("victim", text);
+  typing(true);
+  try{
+    const res = await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({session_id:sid, backend, message:text})});
+    const r = await res.json();
+    typing(false);
+    if(res.status===404 && r.restart){
+      bubble("operator","[the chat service restarted — starting a new negotiation]");
+      await startChat(); lock(false); return;
+    }
+    if(r.error){ bubble("operator","[backend error] "+r.error); }
+    else { view.push({party:"operator", content:r.content}); bubble("operator", r.content); guardNote(r.guard); }
+  }catch(e){ typing(false); bubble("operator","[network error] "+e); }
+  lock(false); inp.focus();
+}
+async function save(){
+  if(!sid){ $("#savenote").textContent="nothing to save yet."; return; }
+  const res = await fetch("/api/save",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({session_id:sid})});
+  const r = await res.json();
+  if(r.error){ $("#savenote").textContent = r.error; return; }
+  const blob=new Blob([JSON.stringify(r.transcript,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=r.filename||"session.json"; a.click();
+  $("#savenote").innerHTML = (r.saved? "saved in the lab at <code>"+r.saved+"</code> and downloaded. "
+    : "downloaded. ") + "Analyze it with <code>./lab leak negotiate &lt;file&gt;</code>.";
+}
+$("#send").onclick=send;
+$("#inp").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}});
+$("#group").onchange=e=>{ group=e.target.value; startChat(); };
+$("#backend").onchange=e=>{ backend=e.target.value; };
+$("#reset").onclick=startChat;
+$("#save").onclick=save;
+(async()=>{ await loadGroups(); await startChat(); })();
+</script>
+</body>
+</html>

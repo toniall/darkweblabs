@@ -1,0 +1,17 @@
+{
+  "name": "detect-lab ground truth",
+  "chapter": 14,
+  "summary": "The answer key for the detect-lab timeline: the significant events a monitor SHOULD alert on across the three snapshots, each with the severity it should carry, and which two are CRITICAL. Everything the feed produces that is not in this list — cosmetic churn and cross-surface duplicates — is noise the monitor should suppress or collapse, not alert on.",
+  "alerts": [
+    {"name": "Northwind",      "t": "t2", "type": "deadline_slip",      "severity": "medium"},
+    {"name": "Meridian",       "t": "t2", "type": "publication",        "severity": "high"},
+    {"name": "Coastal",        "t": "t2", "type": "new_victim",         "severity": "high"},
+    {"name": "NightHawkMkt",   "t": "t2", "type": "market_down",        "severity": "high"},
+    {"name": "RedLattice-m1",  "t": "t2", "type": "new_mirror",         "severity": "low"},
+    {"name": "Northwind",      "t": "t3", "type": "withdrawal",         "severity": "medium"},
+    {"name": "NightHawkMkt-x", "t": "t3", "type": "new_clone",          "severity": "critical"},
+    {"name": "n1ghthawk2",     "t": "t3", "type": "operator_resurface", "severity": "critical"}
+  ],
+  "critical": [["NightHawkMkt-x", "t3"], ["n1ghthawk2", "t3"]],
+  "notes": "market_down of NightHawkMkt is HIGH not MEDIUM because NightHawkMkt is a watched operator's market (Ch13 Alpha) -> boosted. new_clone (impersonation with swapped key) and operator_resurface (a watched signed key reappearing under a new mask) are the two CRITICAL events and must surface at the top. The 10 cosmetic_churn banner flips must be suppressed; the 4 mirror-duplicated victim events (Northwind/Meridian/Coastal new_victim @RedLattice-m1 at t2 + Northwind withdrawal @mirror at t3) must be collapsed into their origin. A naive monitor that alerts on every raw diff surfaces all 8 real events but also 12 false alerts, assigns no severity, and buries the criticals."
+}

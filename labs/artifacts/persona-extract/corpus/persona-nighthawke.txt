@@ -1,0 +1,10 @@
+=== SYNTHETIC LAB DATA — persona profile ===
+persona: Nighthawke
+surface: forum
+displayed_keys: DD44EE55FF6600112233
+signed_keys: DD44EE55FF6600112233
+wallets: bc1qsynth0delta000000000000000000000dddd
+active_hours: 18,19,20,18,19,18,20,19,18,19
+tactics: 
+--- posts ---
+step 1 read the pinned thread. step 2 verify the mirror hash. step 3 report dead links. no exceptions. do not dm me, use the thread. keep it short. one question per post. no exceptions.

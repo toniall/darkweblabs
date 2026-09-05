@@ -1,0 +1,21 @@
+{
+  "name": "crawler",
+  "chapter": 9,
+  "summary": "The Chapter 9 crawler: a seed-driven engine that runs against the range and is graded by the Chapter 8 scorer.",
+  "modules": {
+    "frontier.py": "URL normalization, per-address network classification, the seen-set, the seed-driven frontier, politeness scheduling, and the scope guard (the safety control).",
+    "extract.py": "Link extraction (href + bare dark-web addresses), key-material extraction (PGP/BTC), and content hashing for mirror detection.",
+    "crawl.py": "The orchestrator: ties frontier + injected fetch + extract, walks the login wall, collapses mirrors, flags clones, emits crawl-output.json in the scorer's format. --selftest runs the Chapter 8 scorer on its own output.",
+    "crawl_live.py": "The live driver: wires crawl.py to a real Tor-SOCKS fetch (via curl) against the range. Runs inside the workstation."
+  },
+  "selftests": ["frontier.py --selftest", "extract.py --selftest", "crawl.py --selftest"],
+  "output_format": {
+    "discovered": [
+      {"address": "http://<host>/", "role": "service|mirror|clone",
+       "same_as": "(mirrors) canonical address", "flagged_clone": "(clones) true",
+       "pgp": "(services) extracted fingerprint", "btc": "(services) extracted coin address"}
+    ]
+  },
+  "safety": "The scope guard fetches only dark-web addresses whose host is on the range's published allowlist; clearnet and off-range addresses are refused. The crawler is only ever pointed at the watermarked range, never the real dark web.",
+  "consumed_by": "../range-scorer/scorer.py (Chapter 8, Lab 8.7)"
+}

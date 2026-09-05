@@ -1,0 +1,23 @@
+=== SYNTHETIC LAB DATA — monitoring snapshot ===
+snapshot: t2
+--- victims ---
+Northwind | site=RedLattice | status=countdown | deadline=2026-08-12 | claimed_gb=200
+Meridian | site=RedLattice | status=published | deadline=- | claimed_gb=50
+Coastal | site=RedLattice | status=teased | deadline=2026-08-09 | claimed_gb=80
+Northwind | site=RedLattice-m1 | status=countdown | deadline=2026-08-12 | claimed_gb=200
+Meridian | site=RedLattice-m1 | status=published | deadline=- | claimed_gb=50
+Coastal | site=RedLattice-m1 | status=teased | deadline=2026-08-09 | claimed_gb=80
+--- sites ---
+RedLattice | kind=leak | state=up | content_id=rl-idx-2 | operator=NightHawk
+NightHawkMkt | kind=market | state=down | content_id=nh-idx-1 | operator=NightHawk
+SaltMineMkt | kind=market | state=up | content_id=sm-idx-1 | operator=SaltMine
+--- mirrors ---
+RedLattice-m1 | of=RedLattice | onion=redlat2onion | content_id=rl-idx-2
+--- clones ---
+--- personas ---
+--- pages ---
+churn-1 | content_id=pg-1 | banner=B
+churn-2 | content_id=pg-2 | banner=B
+churn-3 | content_id=pg-3 | banner=B
+churn-4 | content_id=pg-4 | banner=B
+churn-5 | content_id=pg-5 | banner=B

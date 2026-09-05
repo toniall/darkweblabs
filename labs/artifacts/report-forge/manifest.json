@@ -1,0 +1,15 @@
+{
+  "name": "report-forge",
+  "chapter": 15,
+  "summary": "The Chapter 15 capstone: chain the four attribution engines (Ch11 market, Ch12 leak/negotiation, Ch13 persona fusion, Ch14 detection) end-to-end over one incident, assemble their real outputs into an evidence graph for one operator, turn it into calibrated claims, and write a decision-ready intelligence report — graded by the report scorer. The final chapter of the book.",
+  "modules": {
+    "evidence.py": "Chains the four engines by RUNNING each in its own process (they share module names) and assembling their JSON into one evidence graph for Operator Alpha, keyed by the reused signed key F19B7A0C… (the Ch12/13 tell).",
+    "claims.py": "Turns the graph into claims, each with a statement, type (fact/assessment/assumption), provenance, a falsifier, and a confidence set by the provenance->confidence rule (hard identifier / observed event = high; several indirect signals = moderate; single soft signal = low).",
+    "report.py": "Assembles claims into a report (BLUF, key findings by confidence, operator picture, what-would-change-this, evidence annex, attribution boundary); the naive assembler flattens everything to sourceless high-confidence fact.",
+    "pipeline.py": "Runs the capstone (evidence->claims->report); --selftest grades naive-vs-full with the report scorer."
+  },
+  "selftests": ["evidence.py --selftest", "claims.py --selftest", "report.py --selftest", "pipeline.py --selftest"],
+  "reuses": "RUNS Ch11 market-extract, Ch12 leak-extract, Ch13 persona-extract (fuse+identifiers), and Ch14 detect-monitor pipelines and consumes their real output — the genuine end-to-end capstone, no mock. The operator tell F19B7A0C… links a market vendor, two leak brands, a forum handle, and a detection alert into one operator.",
+  "consumed_by": "../report-scorer/scorer.py (claim coverage, provenance completeness, calibration, overclaim count)",
+  "guardrail": "The report attributes to an OPERATOR — a cluster of pseudonyms with a stated confidence — and does NOT identify a natural person; the last mile from operator to named individual is a legal/law-enforcement process, out of scope by design (same lineage as Ch9 scope guard, Ch11 detect-only, Ch13 pseudonym->pseudonym, Ch14 watches-not-acts). Every corpus is watermarked synthetic. The dangerous error is OVERCLAIMING — the analyst's own integrity, the final entry in the book's series."
+}

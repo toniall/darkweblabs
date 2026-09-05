@@ -1,0 +1,17 @@
+{
+  "name": "persona-extract",
+  "chapter": 13,
+  "summary": "The Chapter 13 persona-linkage engine: parse personas, extract hard-identifier / stylometric / behavioural links, and fuse them into operator clusters with confidence and framing flags — graded by the persona scorer. Reuses the Ch10 union-find.",
+  "modules": {
+    "identifiers.py": "Parses persona profiles to records and finds hard links (shared signed key, shared wallet); flags a displayed-but-not-signed key as possible framing rather than a link.",
+    "stylometry.py": "Fingerprints writing voice (function words + char trigrams) and scores similarity; a soft signal that re-links an operator who rotated keys but kept its register.",
+    "behavior.py": "Behavioural links: activity-rhythm histogram overlap, leet handle-transformation equality, and repeated Ch12 tactic sequence.",
+    "fuse.py": "Fuses all signals under one rule (hard dominates, soft must corroborate, displayed-only never merges), clusters personas into operators with the Ch10 union-find, and assigns high/medium confidence.",
+    "pipeline.py": "Runs the whole linkage (naive vs full); --selftest grades itself with the persona scorer."
+  },
+  "corpus": "corpus/ — the persona lab: 8 personas across 4 operators. Alpha (market vendor + 2 leak brands + forum handle, hard-linked by reused key+wallet with soft corroboration), Bravo (rotated key AND wallet, soft-only re-link), Charlie (borrowed-key frame), Delta (handle look-alike). All watermarked synthetic.",
+  "selftests": ["identifiers.py --selftest", "behavior.py --selftest", "fuse.py --selftest", "pipeline.py --selftest"],
+  "reuses": "../dedup/cluster.py (_UF union-find). Echoes Ch11 vendors (NightHawk, SaltMine, Mimic's borrowed key) and Ch12 operator tells (key F19B7A0C4E82D5613FA0 + wallet + tactic sequences).",
+  "consumed_by": "../persona-scorer/scorer.py (link recall/precision, false merges, operator count, confidence calibration, framing flagged)",
+  "guardrail": "Links pseudonym to pseudonym only. It clusters personas into an operator with a confidence; it does NOT take the last step from persona to a real-world person, which is a legal/law-enforcement process out of scope by design."
+}

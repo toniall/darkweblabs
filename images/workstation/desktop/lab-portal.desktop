@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lab Portal
+Comment=Lab instructions, served from inside the stack
+Exec=xdg-open http://10.152.152.20
+Icon=/usr/share/darkweb/lab-portal.png
+Terminal=false
+Categories=Education;

@@ -1,0 +1,110 @@
+{
+  "alerts": [
+    {
+      "t_from": "t2",
+      "t_to": "t3",
+      "type": "new_clone",
+      "name": "NightHawkMkt-x",
+      "surface": "NightHawkMkt-x",
+      "severity": "critical",
+      "rank": 4,
+      "watched": false,
+      "confidence": "high"
+    },
+    {
+      "t_from": "t2",
+      "t_to": "t3",
+      "type": "operator_resurface",
+      "name": "n1ghthawk2",
+      "surface": "n1ghthawk2",
+      "severity": "critical",
+      "rank": 4,
+      "watched": true,
+      "confidence": "high"
+    },
+    {
+      "t_from": "t1",
+      "t_to": "t2",
+      "type": "new_victim",
+      "name": "Coastal",
+      "surface": "RedLattice",
+      "severity": "high",
+      "rank": 3,
+      "watched": false,
+      "confidence": "medium",
+      "seen_on": [
+        "RedLattice",
+        "RedLattice-m1"
+      ]
+    },
+    {
+      "t_from": "t1",
+      "t_to": "t2",
+      "type": "publication",
+      "name": "Meridian",
+      "surface": "RedLattice",
+      "severity": "high",
+      "rank": 3,
+      "watched": false,
+      "confidence": "medium",
+      "seen_on": [
+        "RedLattice",
+        "RedLattice-m1"
+      ]
+    },
+    {
+      "t_from": "t1",
+      "t_to": "t2",
+      "type": "market_down",
+      "name": "NightHawkMkt",
+      "surface": "NightHawkMkt",
+      "severity": "high",
+      "rank": 3,
+      "watched": true,
+      "confidence": "medium"
+    },
+    {
+      "t_from": "t1",
+      "t_to": "t2",
+      "type": "deadline_slip",
+      "name": "Northwind",
+      "surface": "RedLattice",
+      "severity": "medium",
+      "rank": 2,
+      "watched": false,
+      "confidence": "medium",
+      "seen_on": [
+        "RedLattice",
+        "RedLattice-m1"
+      ]
+    },
+    {
+      "t_from": "t2",
+      "t_to": "t3",
+      "type": "withdrawal",
+      "name": "Northwind",
+      "surface": "RedLattice",
+      "severity": "medium",
+      "rank": 2,
+      "watched": false,
+      "confidence": "medium",
+      "seen_on": [
+        "RedLattice",
+        "RedLattice-m1"
+      ]
+    },
+    {
+      "t_from": "t1",
+      "t_to": "t2",
+      "type": "new_mirror",
+      "name": "RedLattice-m1",
+      "surface": "RedLattice-m1",
+      "severity": "low",
+      "rank": 1,
+      "watched": false,
+      "confidence": "medium"
+    }
+  ],
+  "suppressed": 10,
+  "collapsed": 4
+}

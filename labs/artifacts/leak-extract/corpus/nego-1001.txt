@@ -1,0 +1,13 @@
+=== SYNTHETIC LAB DATA — negotiation transcript ===
+victim: Northwind Logistics
+brand: RedLattice
+key: F19B7A0C4E82D5613FA0
+wallet: bc1qsynth0laba0000000000000000000000zzzz
+
+[2026-07-20 10:00] operator: Your network is encrypted. We hold 200GB. Pay 100 BTC within 5 days or we publish.
+[2026-07-21 09:00] victim: We need proof and more time.
+[2026-07-21 12:00] operator: proof: 12GB sample tree attached. Decrypt one file to verify.
+[2026-07-25 10:00] operator: We can extend the deadline to Aug 12. Price now 60 BTC.
+[2026-07-28 15:00] victim: We can do 40.
+[2026-07-29 11:00] operator: Agreed. 40 BTC. Send to the wallet and we delete all data.
+[settlement] 40 BTC — settled

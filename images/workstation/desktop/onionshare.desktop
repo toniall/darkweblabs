@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=OnionShare
+Comment=Share files over an onion service you create
+Exec=/usr/bin/onionshare
+Icon=/usr/share/darkweb/onionshare.png
+Terminal=false
+Categories=Network;FileTransfer;

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#b866ff"/>
+      <stop offset="100%" stop-color="#ef5ce0"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="42" height="42" rx="10" fill="url(#g)"/>
+  <!-- onion layers: sharing over an onion service -->
+  <circle cx="24" cy="25" r="10.5" fill="none" stroke="#ffffff" stroke-width="2.2" opacity="0.55"/>
+  <circle cx="24" cy="25" r="6.5"  fill="none" stroke="#ffffff" stroke-width="2.2" opacity="0.8"/>
+  <!-- share / upload arrow -->
+  <path d="M24 30 V15" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M19.5 19 L24 14.5 L28.5 19" fill="none" stroke="#ffffff" stroke-width="2.6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

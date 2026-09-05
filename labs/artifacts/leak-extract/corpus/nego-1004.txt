@@ -1,0 +1,11 @@
+=== SYNTHETIC LAB DATA — negotiation transcript ===
+victim: Apex Retail Group
+brand: RedLattice
+key: F19B7A0C4E82D5613FA0
+wallet: bc1qsynth0laba0000000000000000000000zzzz
+
+[2026-07-10 10:00] operator: 1TB of your data is already sold to a private buyer.
+[2026-07-11 09:00] victim: Then what do you want from us.
+[2026-07-11 12:00] operator: We can still pull it from the buyer for 200 BTC before it spreads.
+[2026-07-14 10:00] operator: Deadline in 3 days or it goes to auction as well.
+[outcome] ongoing

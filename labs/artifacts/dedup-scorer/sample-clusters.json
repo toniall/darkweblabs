@@ -1,0 +1,65 @@
+{
+  "clusters": [
+    {
+      "canonical": "forum.html",
+      "members": [
+        {
+          "address": "forum.html",
+          "role": "canonical"
+        },
+        {
+          "address": "forum-mirror.html",
+          "role": "mirror",
+          "reason": "benign_copy"
+        }
+      ]
+    },
+    {
+      "canonical": "market.html",
+      "members": [
+        {
+          "address": "market.html",
+          "role": "canonical"
+        },
+        {
+          "address": "market-clone-keyless.html",
+          "role": "clone",
+          "reason": "keyless_copy"
+        },
+        {
+          "address": "market-clone-keyswap.html",
+          "role": "clone",
+          "reason": "payment_swap"
+        },
+        {
+          "address": "market-mirror-banner.html",
+          "role": "mirror",
+          "reason": "shared_payment"
+        },
+        {
+          "address": "market-mirror-exact.html",
+          "role": "mirror",
+          "reason": "shared_payment"
+        }
+      ]
+    },
+    {
+      "canonical": "other-market.html",
+      "members": [
+        {
+          "address": "other-market.html",
+          "role": "canonical"
+        }
+      ]
+    },
+    {
+      "canonical": "paste.html",
+      "members": [
+        {
+          "address": "paste.html",
+          "role": "canonical"
+        }
+      ]
+    }
+  ]
+}

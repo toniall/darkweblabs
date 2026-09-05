@@ -1,0 +1,28 @@
+# generated at first run — never committed
+.env
+
+# collected work
+evidence/
+*.pcap
+*.log
+
+# Never commit a certificate. A PEM in a public repo publishes its private key,
+# and the build generates a fresh one anyway.
+*.pem
+*.key
+labs/artifacts/dedup-scorer/dedup-output.json
+labs/artifacts/market-scorer/market-output.json
+labs/artifacts/leak-scorer/leak-output.json
+labs/artifacts/persona-scorer/linkage-output.json
+labs/artifacts/detect-scorer/alerts-output.json
+labs/artifacts/report-scorer/report-output.json
+
+# The companion site is proprietary and ships with the book, not here. It is
+# bind-mounted into the portal from site/, so it will exist locally once you
+# unpack it — but it must never be committed to this repository.
+#
+# This also covers the placeholder page `./lab up` writes when site/ is empty.
+# nginx serves this directory, and an empty bind mount is a 403 and an unhealthy
+# portal (Lab 1.1 grades portal health), so the placeholder is generated rather
+# than shipped. Generated, and therefore not committed either.
+/site/

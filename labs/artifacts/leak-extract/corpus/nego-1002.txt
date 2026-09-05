@@ -1,0 +1,11 @@
+=== SYNTHETIC LAB DATA — negotiation transcript ===
+victim: Meridian Health
+brand: RedLattice
+key: F19B7A0C4E82D5613FA0
+wallet: bc1qsynth0laba0000000000000000000000zzzz
+
+[2026-07-18 08:00] operator: 500GB of patient records. 300 BTC or we publish and notify the regulator under GDPR and HIPAA.
+[2026-07-19 09:00] victim: This is not payable.
+[2026-07-20 10:00] operator: Then we inform the press and your regulator. Deadline Aug 3.
+[2026-07-30 10:00] victim: We will not pay.
+[outcome] no settlement — published
